@@ -1,0 +1,30 @@
+# Deploy from this directory — the build context is this app, nothing above it:
+#
+#   fly deploy
+
+app = "keydris-mcp-demo"
+primary_region = "iad"
+
+[env]
+  PORT = "8787"
+  KEYDRIS_GATEWAY_URL = "https://api.keydris.com/gateway/credentials"
+
+[http_service]
+  internal_port = 8787
+  force_https = true
+  auto_start_machines = true
+  # Kept warm: a cold start stalls the MCP handshake long enough for a client to
+  # give up and report the server as unreachable.
+  auto_stop_machines = "off"
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/healthz"
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
