@@ -34,3 +34,34 @@ jobs:
       # Print exactly what `npm publish` would ship, so a bad `files` entry or a
       # missing subpath declaration fails a PR instead of a release.
       - run: npm pack --dry-run -w @keydris/kit-reader
+
+  python:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor the library claims, and the version it is developed on.
+        python-version: ['3.10', '3.13']
+    defaults:
+      run:
+        working-directory: python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v10
+        with:
+          # Sets UV_PYTHON, so every uv command below uses this version rather
+          # than the one in python/.python-version.
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+          cache-dependency-glob: python/uv.lock
+      # --locked: resolve from uv.lock or fail, never silently update it.
+      - run: uv sync --locked --all-packages
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy
+      - run: uv run pytest
+      # Build and validate the sdist and wheel, so a bad `packages` or
+      # `license-files` entry fails a PR instead of a release — the counterpart
+      # of `npm pack --dry-run` above.
+      - run: uv build --package keydris-kit-reader
+      - run: uv run twine check dist/*

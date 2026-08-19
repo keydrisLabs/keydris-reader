@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "keydris-kit-reader-github-demo"
+version = "0.0.1"
+description = "Sample MCP server built on keydris-kit-reader: redeems a KIT action token for a GitHub PAT"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+# npm's `"private": true` has no PyPI equivalent; this classifier is the one
+# thing the index refuses outright, so an accidental upload cannot land.
+classifiers = ["Private :: Do Not Upload"]
+dependencies = [
+  "keydris-kit-reader",
+  # The middleware adapter tracks the SDK's provisional server-middleware API.
+  "mcp>=2,<3",
+  # Already what `mcp` installs; declared because this app imports it directly.
+  "httpx2>=2.5",
+  "python-dotenv>=1.0",
+  "uvicorn>=0.31",
+]
+
+[project.scripts]
+github-mcp-server = "keydris_kit_reader_github_demo.__main__:main"
+
+[tool.uv.sources]
+keydris-kit-reader = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/keydris_kit_reader_github_demo"]
