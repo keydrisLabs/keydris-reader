@@ -1,0 +1,106 @@
+name: Release kit-reader
+
+# Cutting a release is "bump the manifest, push a tag":
+#
+#   cd node
+#   npm version minor -w @keydris/kit-reader --no-git-tag-version
+#   git commit -am "release: @keydris/kit-reader 0.2.0"
+#   git tag kit-reader-v0.2.0 && git push origin main --follow-tags
+on:
+  push:
+    tags: ['kit-reader-v*']
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Pack and validate without publishing'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-kit-reader
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    permissions:
+      contents: write # gh release create
+      id-token: write # npm trusted publishing (OIDC) + provenance
+    defaults:
+      run:
+        working-directory: node
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          # Required even with OIDC — it points npm at the public registry.
+          registry-url: 'https://registry.npmjs.org'
+          cache: npm
+          cache-dependency-path: node/package-lock.json
+
+      # Trusted publishing needs npm >= 11.5.1; don't depend on what Node 24 bundles.
+      - run: npm install -g npm@latest
+
+      - run: npm ci
+
+      # The tag says what is being released, the manifest says what gets built.
+      # If they disagree, stop before anything reaches the registry.
+      - name: Resolve version and dist-tag
+        id: version
+        run: |
+          manifest=$(node -p "require('./packages/kit-reader/package.json').version")
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            tag="${GITHUB_REF_NAME#kit-reader-v}"
+            if [ "$manifest" != "$tag" ]; then
+              echo "::error::tag $GITHUB_REF_NAME implies $tag but package.json says $manifest"
+              exit 1
+            fi
+          fi
+          # A prerelease must not become `latest`; 0.2.0-rc.1 goes out as `next`.
+          case "$manifest" in
+            *-*) dist_tag=next ;;
+            *)   dist_tag=latest ;;
+          esac
+          echo "version=$manifest" >> "$GITHUB_OUTPUT"
+          echo "dist_tag=$dist_tag" >> "$GITHUB_OUTPUT"
+          echo "Releasing @keydris/kit-reader $manifest under dist-tag $dist_tag"
+
+      # The same gates CI runs — a tag must never skip them.
+      - run: npm run typecheck
+      - run: npm test
+
+      # Only the library, not the root build, which also builds the private demo.
+      - run: npm run build -w @keydris/kit-reader
+
+      - name: Inspect the tarball
+        run: npm pack --dry-run -w @keydris/kit-reader
+
+      # No NODE_AUTH_TOKEN and no NPM_TOKEN secret: OIDC supplies the credential.
+      - name: Publish to npm
+        if: github.event_name == 'push' || inputs.dry_run == false
+        run: |
+          npm publish -w @keydris/kit-reader \
+            --provenance --access public \
+            --tag "${{ steps.version.outputs.dist_tag }}"
+
+      - name: Create GitHub Release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          DIST_TAG: ${{ steps.version.outputs.dist_tag }}
+        run: |
+          # An `x && y` one-liner would exit non-zero here under `bash -e`
+          # whenever the test is false, i.e. on every stable release.
+          flags=""
+          if [ "$DIST_TAG" = "next" ]; then
+            flags="--prerelease"
+          fi
+          gh release create "$GITHUB_REF_NAME" \
+            --title "@keydris/kit-reader $VERSION" \
+            --generate-notes $flags

@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "description": "Sample MCP server built on @keydris/kit-reader: redeems a KIT action token for a GitHub PAT",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "type": "module",
   "engines": {
     "node": ">=20"
