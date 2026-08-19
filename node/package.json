@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "description": "Node workspaces: the @keydris/kit-reader library and a sample MCP server built on it",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "type": "module",
   "engines": {
     "node": ">=20"

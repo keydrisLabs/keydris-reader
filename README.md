@@ -77,5 +77,4 @@ The sample server listens on `:8787` and redeems against the gateway URL in that
 
 ## License
 
-Not yet finalized. A `LICENSE` file will be added before this repository is made
-public.
+[Apache License 2.0](LICENSE). See [`NOTICE`](NOTICE) for attribution.
