@@ -136,10 +136,10 @@ KIT action token and a header token and they disagree, redemption refuses rather
 
 ## A worked example
 
-[`examples/github-mcp-server`](../../examples/github-mcp-server) is a complete MCP server built on
-this library — one `github_whoami` tool, no credential of its own — with instructions for running it
-against a stub gateway, deploying it, and wiring policy to gate both the action and the credential
-release.
+[`examples/github-mcp-server`](https://github.com/keydrisLabs/keydris-reader/tree/main/node/examples/github-mcp-server)
+is a complete MCP server built on this library — one `github_whoami` tool, no credential of its
+own — with instructions for running it against a stub gateway, deploying it, and wiring policy to
+gate both the action and the credential release.
 
 ## Development
 
@@ -148,3 +148,10 @@ npm run typecheck
 npm test          # node:test over src/*.test.ts
 npm run build     # emit dist/ (tests excluded)
 ```
+
+Releases are cut by pushing a `kit-reader-v*` tag; see
+[the workspace README](https://github.com/keydrisLabs/keydris-reader/tree/main/node#releasing-the-library).
+
+## License
+
+[Apache License 2.0](https://github.com/keydrisLabs/keydris-reader/blob/main/LICENSE).

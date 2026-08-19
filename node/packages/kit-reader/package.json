@@ -2,8 +2,27 @@
   "name": "@keydris/kit-reader",
   "version": "0.1.0",
   "description": "Redeem a single-use Keydris KIT action token for the credential an MCP server needs upstream",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
+  "author": "Keydris Labs",
+  "keywords": [
+    "keydris",
+    "mcp",
+    "model-context-protocol",
+    "credentials",
+    "secrets",
+    "kit"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/keydrisLabs/keydris-reader.git",
+    "directory": "node/packages/kit-reader"
+  },
+  "homepage": "https://github.com/keydrisLabs/keydris-reader/tree/main/node/packages/kit-reader#readme",
+  "bugs": {
+    "url": "https://github.com/keydrisLabs/keydris-reader/issues"
+  },
   "type": "module",
+  "sideEffects": false,
   "engines": {
     "node": ">=20"
   },
@@ -22,10 +41,14 @@
       "default": "./dist/express.js"
     }
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx --test src/*.test.ts"
+    "test": "tsx --test src/*.test.ts",
+    "prepack": "npm run build"
   },
   "peerDependencies": {
     "express": "^5.0.0"
