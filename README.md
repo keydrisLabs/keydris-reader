@@ -1,22 +1,33 @@
 # keydris-reader
 
-A reference MCP server that holds **no credential of its own**.
+A library that lets an MCP server hold **no credential of its own** — and a sample
+server built on it.
 
-It exposes one tool, `github_whoami`, and obtains the GitHub PAT that tool needs
-at call time by redeeming the single-use, action-scoped KIT token the Keydris
-proxy injected into the MCP request. Nothing secret is configured on the server,
-baked into its image, or held between requests.
+Instead of configuring a secret on the server, baking it into an image, or holding
+it between requests, the server obtains the credential a tool needs at call time,
+by redeeming the single-use, action-scoped KIT token the Keydris proxy injected
+into the MCP request.
 
 ```
 agent ──► proxy ──► POST /v1/runtime/mcp/kit-action-tokens ──► KIT action token
           proxy ──► POST /mcp
                     params._meta["keydris/kit_action_token"] = token
-                                                            ──► this server
-                    this server ──► POST /gateway/credentials
-                                   {token, mcp}
-                                ◄── {credentials:[{type,name,prefix,value}]}
-                    this server ──► GET api.github.com/user  (credential applied)
+                                                            ──► the MCP server
+                    the MCP server ──► POST /gateway/credentials
+                                      {token, mcp}
+                                   ◄── {credentials:[{type,name,prefix,value}]}
+                    the MCP server ──► the upstream API  (credential applied)
 ```
+
+The two pieces are kept separate on purpose:
+
+- **The library** does the token handling — reading the action token out of the
+  MCP request, redeeming it at the gateway, applying the released credential to
+  the outbound call. Install it in any MCP server; it has no dependencies and no
+  opinion about your HTTP framework.
+- **The sample** is a complete server that uses it: one `github_whoami` tool
+  backed by a GitHub PAT the server never stores. It is what to read, run, and
+  copy from.
 
 ## Why it is shaped this way
 
@@ -28,38 +39,41 @@ agent ──► proxy ──► POST /v1/runtime/mcp/kit-action-tokens ──►
   through untouched, so a client with no token can still connect and see what is
   on offer — it discovers it needs one only when it asks for something that
   reveals a credential.
-- **Nothing outlives the request.** The MCP server and its transport are built
-  per request in stateless mode, so the released credential lives on the stack of
-  the call that was authorized for it. A long-lived MCP session would otherwise
-  outlive the short-lived token that authorized it.
+- **Nothing outlives the request.** The library holds no state between calls, and
+  the sample builds its MCP server and transport per request in stateless mode, so
+  the released credential lives on the stack of the call that was authorized for
+  it. A long-lived MCP session would otherwise outlive the short-lived token that
+  authorized it — the one part a server has to get right for itself.
 - **Failures are answers, not crashes.** A missing token, a gateway refusal
   naming its code, an unreachable gateway — each comes back as a readable tool
   error rather than an HTTP failure the agent has to guess at.
 
 ## Implementations
 
-| Language | Path              | Status                    |
-| -------- | ----------------- | ------------------------- |
-| Node/TS  | [`node/`](node/)  | Available                 |
-| Python   | `python/`         | Coming soon               |
+| Language | Library                                                          | Sample                                                                            | Status      |
+| -------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------- | ----------- |
+| Node/TS  | [`@keydris/kit-reader`](node/packages/kit-reader)                 | [`github-mcp-server`](node/examples/github-mcp-server)                             | Available   |
+| Python   | `python/`                                                         | —                                                                                 | Coming soon |
 
-Start with [`node/README.md`](node/README.md) for setup, running it locally,
-deploying it, and wiring policy to gate both the action and the credential
-release.
+Start with [`node/packages/kit-reader/README.md`](node/packages/kit-reader/README.md)
+to put KIT reading into your own server, or
+[`node/examples/github-mcp-server/README.md`](node/examples/github-mcp-server/README.md)
+for setup, running it locally, deploying it, and wiring policy to gate both the
+action and the credential release.
 
 ## Quick start
 
 ```bash
 cd node
 npm install
-cp .env.example .env
+cp examples/github-mcp-server/.env.example examples/github-mcp-server/.env
 npm run dev
 ```
 
-The server listens on `:8787` and redeems against the gateway URL in `.env`.
-It can be exercised without a control plane at all — point
+The sample server listens on `:8787` and redeems against the gateway URL in that
+`.env`. It can be exercised without a control plane at all — point
 `KEYDRIS_GATEWAY_URL` and `GITHUB_API_BASE` at stubs, as described in
-[`node/README.md`](node/README.md#trying-it-without-a-control-plane).
+[the sample's README](node/examples/github-mcp-server/README.md#trying-it-without-a-control-plane).
 
 ## License
 

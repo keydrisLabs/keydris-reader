@@ -1,5 +1,5 @@
+import { applyCredentials, type CredentialEnvelope } from '@keydris/kit-reader';
 import { config } from './config.js';
-import { applyCredentials, type CredentialEnvelope } from './keydris.js';
 
 export type GitHubUser = {
   login: string;

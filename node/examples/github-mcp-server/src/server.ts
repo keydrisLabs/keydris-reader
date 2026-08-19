@@ -1,7 +1,7 @@
+import type { Redemption } from '@keydris/kit-reader';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { fetchAuthenticatedUser, GitHubError } from './github.js';
-import type { Redemption } from './keydris.js';
 
 const outputSchema = {
   login: z.string(),
