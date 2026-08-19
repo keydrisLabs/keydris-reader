@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // Outside dist/, which is the published artifact — the build cache is not.
+    "tsBuildInfoFile": "./tsconfig.build.tsbuildinfo"
+  },
+  "exclude": ["src/**/*.test.ts"]
+}
