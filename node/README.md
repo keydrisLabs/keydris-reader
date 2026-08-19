@@ -52,3 +52,30 @@ example, because the build context has to span both workspaces:
 ```bash
 fly deploy
 ```
+
+## Releasing the library
+
+Only `packages/kit-reader` is published; the example is `private` and ships as the Fly app above.
+A release is a version bump and a tag — [`.github/workflows/release.yml`](../.github/workflows/release.yml)
+does the rest:
+
+```bash
+npm version minor -w @keydris/kit-reader --no-git-tag-version
+git commit -am "release: @keydris/kit-reader 0.2.0"
+git tag kit-reader-v0.2.0
+git push origin main --follow-tags
+```
+
+`--no-git-tag-version` matters: npm's own tagging would write `v0.2.0`, but the tag has to be
+package-scoped (`kit-reader-v*`) so a future `python/` library can release independently. The
+workflow re-runs typecheck, tests, and the build, then refuses to publish if the tag and
+`package.json` disagree — so a mistyped tag fails loudly instead of shipping the wrong version.
+
+Publishing uses npm **trusted publishing**: the registry credential comes from GitHub's OIDC token
+at run time, so there is no `NPM_TOKEN` secret to rotate, and every release carries a provenance
+attestation linking it back to the workflow run. That requires two one-time setup steps on
+npmjs.com — publishing `@keydris/kit-reader` once by hand to create the package, then adding
+`keydrisLabs/keydris-reader` + `release.yml` as its trusted publisher.
+
+To rehearse without releasing, run the workflow manually from the Actions tab with `dry_run: true`:
+it builds and prints the tarball contents, and skips the publish.
