@@ -47,7 +47,7 @@ jobs:
         working-directory: python
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.0.1
         with:
           # Sets UV_PYTHON, so every uv command below uses this version rather
           # than the one in python/.python-version.
