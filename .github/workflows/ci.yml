@@ -19,6 +19,8 @@ jobs:
           cache: npm
           cache-dependency-path: node/package-lock.json
       - run: npm ci
+      # Each script fans out across packages/* and examples/*, building the
+      # library first so the example can resolve it.
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
