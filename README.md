@@ -50,30 +50,38 @@ The two pieces are kept separate on purpose:
 
 ## Implementations
 
-| Language | Library                                                          | Sample                                                                            | Status      |
-| -------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------- | ----------- |
-| Node/TS  | [`@keydris/kit-reader`](node/packages/kit-reader)                 | [`github-mcp-server`](node/examples/github-mcp-server)                             | Available   |
-| Python   | `python/`                                                         | —                                                                                 | Coming soon |
+| Language | Library                                                    | Sample                                                       | Status    |
+| -------- | ---------------------------------------------------------- | ------------------------------------------------------------ | --------- |
+| Node/TS  | [`@keydris/kit-reader`](node/packages/kit-reader)           | [`github-mcp-server`](node/examples/github-mcp-server)        | Available |
+| Python   | [`keydris-kit-reader`](python/packages/kit-reader)          | [`github-mcp-server`](python/examples/github-mcp-server)      | Available |
 
-Start with [`node/packages/kit-reader/README.md`](node/packages/kit-reader/README.md)
-to put KIT reading into your own server, or
-[`node/examples/github-mcp-server/README.md`](node/examples/github-mcp-server/README.md)
-for setup, running it locally, deploying it, and wiring policy to gate both the
-action and the credential release.
+The two are the same library twice, not a port and a wrapper: the `_meta` key, the
+redemption body, and the failure messages are identical, so the proxy, the gateway,
+and the agent cannot tell which one is answering.
+
+Start with the library README for the language you serve in —
+[Node](node/packages/kit-reader/README.md) or [Python](python/packages/kit-reader/README.md) —
+to put KIT reading into your own server, or the sample's README
+([Node](node/examples/github-mcp-server/README.md),
+[Python](python/examples/github-mcp-server/README.md)) for setup, running it
+locally, deploying it, and wiring policy to gate both the action and the
+credential release.
 
 ## Quick start
 
 ```bash
-cd node
-npm install
+cd node                                                       # or: cd python
+npm install                                                   # uv sync --all-packages
 cp examples/github-mcp-server/.env.example examples/github-mcp-server/.env
-npm run dev
+npm run dev                                                   # uv run github-mcp-server
 ```
 
-The sample server listens on `:8787` and redeems against the gateway URL in that
-`.env`. It can be exercised without a control plane at all — point
-`KEYDRIS_GATEWAY_URL` and `GITHUB_API_BASE` at stubs, as described in
-[the sample's README](node/examples/github-mcp-server/README.md#trying-it-without-a-control-plane).
+The Node sample listens on `:8787` and the Python one on `:8788` — different ports
+so both can run at once — and each redeems against the gateway URL in that `.env`.
+Either can be exercised without a control plane at all: point
+`KEYDRIS_GATEWAY_URL` and `GITHUB_API_BASE` at stubs, as described in the sample's
+README ([Node](node/examples/github-mcp-server/README.md#trying-it-without-a-control-plane),
+[Python](python/examples/github-mcp-server/README.md#trying-it-without-a-control-plane)).
 
 ## License
 
