@@ -1,0 +1,47 @@
+[build-system]
+# >=1.27 for PEP 639 `license` / `license-files`.
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "keydris-kit-reader"
+version = "0.1.0"
+description = "Redeem a single-use Keydris KIT action token for the credential an MCP server needs upstream"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Keydris Labs" }]
+keywords = ["keydris", "mcp", "model-context-protocol", "credentials", "secrets", "kit"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Framework :: AsyncIO",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Security",
+  "Typing :: Typed",
+]
+# None. The default transport is stdlib; anything else is injected.
+dependencies = []
+
+[project.optional-dependencies]
+# Needed only by `keydris_kit_reader.mcp`, the SDK middleware adapter.
+mcp = ["mcp>=2,<3"]
+
+[project.urls]
+Homepage = "https://github.com/keydrisLabs/keydris-reader/tree/main/python/packages/kit-reader#readme"
+Repository = "https://github.com/keydrisLabs/keydris-reader"
+Issues = "https://github.com/keydrisLabs/keydris-reader/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/keydris_kit_reader"]
+
+# The published artifact is the library and its license — not the tests, and not
+# the workspace scaffolding around it.
+[tool.hatch.build.targets.sdist]
+include = ["src", "README.md", "LICENSE"]
