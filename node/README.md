@@ -67,7 +67,8 @@ git push origin main --follow-tags
 ```
 
 `--no-git-tag-version` matters: npm's own tagging would write `v0.2.0`, but the tag has to be
-package-scoped (`kit-reader-v*`) so a future `python/` library can release independently. The
+package-scoped (`kit-reader-v*`) so that this and the [`python/`](../python) library release
+independently — that one answers to `kit-reader-py-v*`. The
 workflow re-runs typecheck, tests, and the build, then refuses to publish if the tag and
 `package.json` disagree — so a mistyped tag fails loudly instead of shipping the wrong version.
 

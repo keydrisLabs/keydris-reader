@@ -1,0 +1,52 @@
+[project]
+name = "keydris-reader-python"
+version = "0.0.1"
+description = "Python workspace: the keydris-kit-reader library and a sample MCP server built on it"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.uv]
+# The root is scaffolding, not something to install.
+package = false
+
+[tool.uv.workspace]
+members = ["packages/*", "examples/*"]
+
+[dependency-groups]
+dev = [
+  "mypy>=1.14",
+  "pytest>=8.3",
+  "pytest-asyncio>=1.0",
+  "ruff>=0.9",
+  "twine>=6.1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["packages/kit-reader/tests"]
+asyncio_mode = "auto"
+
+[tool.mypy]
+strict = true
+# The floor the library claims, so 3.13-only typing cannot creep in.
+python_version = "3.10"
+files = [
+  "packages/kit-reader/src",
+  "packages/kit-reader/tests",
+  "examples/github-mcp-server/src",
+]
+
+[[tool.mypy.overrides]]
+# anyio is not a dependency — the default transport prefers it when the host
+# application already brought it, and falls back to asyncio when it did not.
+module = ["anyio.*"]
+ignore_missing_imports = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["keydris_kit_reader", "keydris_kit_reader_github_demo"]

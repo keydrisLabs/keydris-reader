@@ -1,0 +1,106 @@
+name: Release kit-reader (Python)
+
+# Cutting a release is "bump the manifest, push a tag":
+#
+#   $EDITOR python/packages/kit-reader/pyproject.toml   # version = "0.2.0"
+#   git commit -am "release: keydris-kit-reader 0.2.0"
+#   git tag kit-reader-py-v0.2.0 && git push origin main --follow-tags
+#
+# The tag is package-scoped, and deliberately not the Node one: `kit-reader-v*`
+# releases @keydris/kit-reader, `kit-reader-py-v*` releases this.
+on:
+  push:
+    tags: ['kit-reader-py-v*']
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Build and validate without publishing'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-kit-reader-python
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: pypi-publish
+    permissions:
+      contents: write # gh release create
+      id-token: write # PyPI trusted publishing (OIDC) + attestations
+    defaults:
+      run:
+        working-directory: python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          cache-dependency-glob: python/uv.lock
+
+      - run: uv sync --locked --all-packages
+
+      # The tag says what is being released, the manifest says what gets built.
+      # If they disagree, stop before anything reaches the index — a PyPI version
+      # can be yanked but never replaced.
+      - name: Resolve version
+        id: version
+        run: |
+          manifest=$(python3 -c 'import tomllib,pathlib; print(tomllib.loads(pathlib.Path("packages/kit-reader/pyproject.toml").read_text())["project"]["version"])')
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            tag="${GITHUB_REF_NAME#kit-reader-py-v}"
+            if [ "$manifest" != "$tag" ]; then
+              echo "::error::tag $GITHUB_REF_NAME implies $tag but pyproject.toml says $manifest"
+              exit 1
+            fi
+          fi
+          # PyPI has no dist-tags: PEP 440 is the whole mechanism, and `pip
+          # install` already skips a prerelease unless asked with --pre. This
+          # only decides how the GitHub release is labelled.
+          prerelease=$(uv run --with packaging python -c 'import sys; from packaging.version import Version; print("true" if Version(sys.argv[1]).is_prerelease else "false")' "$manifest")
+          echo "version=$manifest" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          echo "Releasing keydris-kit-reader $manifest (prerelease: $prerelease)"
+
+      # The same gates CI runs — a tag must never skip them.
+      - run: uv run mypy
+      - run: uv run pytest
+
+      # Only the library. The demo carries `Private :: Do Not Upload`, but the
+      # surest way not to publish it is not to build it.
+      - run: uv build --package keydris-kit-reader
+
+      - name: Inspect the artifacts
+        run: |
+          ls -l dist
+          uv run twine check dist/*
+
+      # No API token secret: OIDC supplies the credential, and the action
+      # attaches a PEP 740 attestation linking the files to this workflow run.
+      # `packages-dir` is repo-relative — a `uses:` step ignores the job's
+      # working-directory default.
+      - name: Publish to PyPI
+        if: github.event_name == 'push' || inputs.dry_run == false
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: python/dist
+
+      - name: Create GitHub Release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+        run: |
+          # An `x && y` one-liner would exit non-zero here under `bash -e`
+          # whenever the test is false, i.e. on every stable release.
+          flags=""
+          if [ "$PRERELEASE" = "true" ]; then
+            flags="--prerelease"
+          fi
+          gh release create "$GITHUB_REF_NAME" \
+            --title "keydris-kit-reader $VERSION" \
+            --generate-notes $flags

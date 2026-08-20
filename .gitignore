@@ -4,3 +4,11 @@ dist/
 *.tsbuildinfo
 *.tgz
 .DS_Store
+
+# Python
+__pycache__/
+*.egg-info/
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
