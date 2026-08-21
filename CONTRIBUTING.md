@@ -1,12 +1,12 @@
 # Contributing to keydris-reader
 
-Thanks for helping out. This repository holds two implementations of one library — Node and Python —
+Thanks for helping out. This repository holds two implementations of one library, Node and Python,
 plus a sample server for each, and the thing that makes it unusual is that **the two must stay
 byte-identical on the wire**. Most of the guidance below follows from that.
 
 Questions and design discussion are welcome in [Discord](https://discord.gg/3JUcXkUTu) or an
 [issue](https://github.com/keydrisLabs/keydris-reader/issues). Vulnerabilities go through
-[SECURITY.md](SECURITY.md) instead — never a public issue.
+[SECURITY.md](SECURITY.md) instead, never a public issue.
 
 ---
 
@@ -31,10 +31,10 @@ If you are only fixing a typo in a comment or a README, none of this applies.
 
 | Path | What it is |
 | --- | --- |
-| [`node/packages/kit-reader`](node/packages/kit-reader) | `@keydris/kit-reader` — published |
-| [`node/examples/github-mcp-server`](node/examples/github-mcp-server) | Sample server — private, never published |
-| [`python/packages/kit-reader`](python/packages/kit-reader) | `keydris-kit-reader` — published |
-| [`python/examples/github-mcp-server`](python/examples/github-mcp-server) | Sample server — never published |
+| [`node/packages/kit-reader`](node/packages/kit-reader) | `@keydris/kit-reader`, published |
+| [`node/examples/github-mcp-server`](node/examples/github-mcp-server) | Sample server (private, never published) |
+| [`python/packages/kit-reader`](python/packages/kit-reader) | `keydris-kit-reader`, published |
+| [`python/examples/github-mcp-server`](python/examples/github-mcp-server) | Sample server (never published) |
 | [`HOW-IT-WORKS.md`](HOW-IT-WORKS.md) | The long-form explanation of both |
 
 The split between library and sample is load-bearing. The library stays dependency-free and
@@ -73,7 +73,7 @@ Both samples read their configuration from `.env`:
 cp examples/github-mcp-server/.env.example examples/github-mcp-server/.env
 ```
 
-Neither needs a control plane to run — point `KEYDRIS_GATEWAY_URL` and `GITHUB_API_BASE` at stubs,
+Neither needs a control plane to run. Point `KEYDRIS_GATEWAY_URL` and `GITHUB_API_BASE` at stubs,
 as the sample READMEs describe.
 
 ---
@@ -84,8 +84,8 @@ Every pull request runs two jobs, and they are the bar to clear locally:
 
 | Job | Steps |
 | --- | --- |
-| **node** | `npm ci` → `typecheck` → `test` → `build` → `npm pack --dry-run` |
-| **python** | matrix 3.10 / 3.13 → `uv sync --locked` → `ruff check` → `ruff format --check` → `mypy` → `pytest` → `uv build` → `twine check` |
+| **node** | `npm ci`, `typecheck`, `test`, `build`, `npm pack --dry-run` |
+| **python** | matrix 3.10 / 3.13, then `uv sync --locked`, `ruff check`, `ruff format --check`, `mypy`, `pytest`, `uv build`, `twine check` |
 
 `npm pack --dry-run` and `twine check` are there on purpose: a bad `files` entry or a missing subpath
 export should fail a pull request, not a release.
@@ -109,7 +109,7 @@ export should fail a pull request, not a release.
   that is the thing to reconsider.
 - **Never widen a secret's reach.** No new logging of `credentials`, no new `repr` that could carry
   one, no caching of a `Redemption`.
-- **Tests live next to what they test** — `src/*.test.ts` in Node, `tests/test_*.py` in Python, and
+- **Tests live next to what they test:** `src/*.test.ts` in Node, `tests/test_*.py` in Python, and
   the ported suites keep their docstring naming the Node file they mirror.
 
 ---
@@ -120,13 +120,13 @@ export should fail a pull request, not a release.
 2. Make the change in **both languages** if it touches behavior on the wire.
 3. Add or update tests. A new refusal needs a Python test *and* the Node string it matches.
 4. Run the checks for the workspaces you touched.
-5. Write a commit message that says what changed and why — the existing history uses
+5. Write a commit message that says what changed and why; the existing history uses
    `feat:` / `fix:` / `chore:` / `ci:` prefixes.
 6. Open the pull request against `main`, and describe the behavior change, not just the diff.
 
 Small, reviewable pull requests move faster than large ones. If you are planning something
-structural — a new adapter, a change to the redemption body — open an issue or ask in Discord first,
-so we can agree on the shape before you build it.
+structural, such as a new adapter or a change to the redemption body, open an issue or ask in
+Discord first, so we can agree on the shape before you build it.
 
 ---
 
@@ -148,7 +148,7 @@ git tag kit-reader-py-v0.2.0 && git push origin main --follow-tags
 ```
 
 Both workflows re-run the full checks, **refuse to publish if the tag and the manifest version
-disagree**, and publish through GitHub OIDC trusted publishing — no npm token, no PyPI token, and a
+disagree**, and publish through GitHub OIDC trusted publishing: no npm token, no PyPI token, and a
 provenance or PEP 740 attestation on every release. Both accept a manual `dry_run: true`.
 
 ---

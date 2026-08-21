@@ -1,6 +1,6 @@
-# keydris-reader — Credential-Free MCP Servers (Node + Python)
+# keydris-reader: Credential-Free MCP Servers (Node + Python)
 
-**keydris-reader is the KIT action token library for MCP servers — available for Node/TypeScript and Python. Your server holds no API key, no PAT, no secret of any kind: it redeems a single-use, action-scoped token for the credential each tool call needs, at call time.**
+**keydris-reader is the KIT action token library for MCP servers, available for Node/TypeScript and Python. Your server holds no API key, no PAT, no secret of any kind: it redeems a single-use, action-scoped token for the credential each tool call needs, at call time.**
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 [![CI](https://github.com/keydrisLabs/keydris-reader/actions/workflows/ci.yml/badge.svg)](https://github.com/keydrisLabs/keydris-reader/actions/workflows/ci.yml)
@@ -15,29 +15,37 @@
 ---
 
 <p align="center">
-  <img src="images/keydris-readers.png" alt="Keydris kit-reader — MCP servers that hold no credential of their own" width="100%" />
+  <img src="images/keydris-readers.png" alt="Keydris kit-reader: MCP servers that hold no credential of their own" width="100%" />
+</p>
+
+<p align="center">
+  An MCP server that holds no credential of its own. One single-use token, one action, one call.
+</p>
+
+<p align="center">
+  <a href="https://keydris.com/">Website</a> ·
+  <a href="HOW-IT-WORKS.md">Docs</a> ·
+  <a href="https://discord.gg/3JUcXkUTu">Discord</a>
 </p>
 
 ---
 
 ## Documentation
 
-**[Read HOW-IT-WORKS.md](HOW-IT-WORKS.md)** — a full walkthrough of both libraries: the wire contract, every branch the code can take, the complete outcome table, and how the two sample servers wire it up.
-
-Website: **[keydris.com](https://keydris.com/)** — Questions, ideas, or integration help: **[join the Discord](https://discord.gg/3JUcXkUTu)**.
+**[Read HOW-IT-WORKS.md](HOW-IT-WORKS.md)** is a full walkthrough of both libraries: the wire contract, every branch the code can take, the complete outcome table, and how the two sample servers wire it up.
 
 ---
 
 ## Why a credential-free MCP server?
 
-An MCP server that talks to a third-party API normally holds that API's credential. It is set as an environment variable, baked into an image, or loaded at boot, and it sits there for the lifetime of the process — usable by every request, every tool, and anyone who gets a shell on the box.
+An MCP server that talks to a third-party API normally holds that API's credential. It is set as an environment variable, baked into an image, or loaded at boot, and it sits there for the lifetime of the process, usable by every request, every tool, and anyone who gets a shell on the box.
 
 The kit-reader removes that credential from the server entirely.
 
 - No secret at rest. A compromised server yields nothing between requests; an attacker has to be present *during* an authorized call.
-- The credential's blast radius is one call. Not one process, not one session — one `tools/call`, with known arguments, evaluated against policy before the secret is revealed.
+- The credential's blast radius is one call. Not one process, not one session: one `tools/call`, with known arguments, evaluated against policy before the secret is revealed.
 - Redemption is bound to the actual call. The tool name and the exact arguments travel with the token, so the gateway decides against the call that is really about to happen.
-- Failures are answers, not crashes. A missing token, a policy denial, an unreachable gateway — each comes back as a readable tool error rather than an HTTP failure the agent has to guess at.
+- Failures are answers, not crashes. A missing token, a policy denial, an unreachable gateway: each comes back as a readable tool error rather than an HTTP failure the agent has to guess at.
 - Zero runtime dependencies, in both languages. Framework adapters are optional; the core is plain standard library.
 
 ---
@@ -74,7 +82,7 @@ Inside the server, the library owns exactly three moments.
 
 The two are the same library twice, not a port and a wrapper: the `_meta` key, the redemption body, and the failure messages are identical, so the proxy, the gateway, and the agent cannot tell which one is answering. A test (`test_parity.py`) reads the Node sources and asserts every Python failure string appears in them verbatim.
 
-The split between **library** and **sample** is deliberate. The library is what you install — dependency-free and framework-agnostic. The sample is what you read, run, and copy; it is never published.
+The split between **library** and **sample** is deliberate. The library is what you install: dependency-free and framework-agnostic. The sample is what you read, run, and copy; it is never published.
 
 ---
 
@@ -118,7 +126,7 @@ The split between **library** and **sample** is deliberate. The library is what 
 }
 ```
 
-A refusal is a non-2xx carrying a code — `policy_denied`, `credential_not_found`, `session_inactive`, `credential_unavailable`.
+A refusal is a non-2xx carrying a code: `policy_denied`, `credential_not_found`, `session_inactive`, or `credential_unavailable`.
 
 ---
 
@@ -127,7 +135,7 @@ A refusal is a non-2xx carrying a code — `policy_denied`, `credential_not_foun
 ### Prerequisites
 
 - Node 20+ (npm), or Python 3.10+ ([uv](https://docs.astral.sh/uv/))
-- A Keydris gateway URL to redeem against — or a stub, see [Trying it without a control plane](#trying-it-without-a-control-plane)
+- A Keydris gateway URL to redeem against, or a stub (see [Trying it without a control plane](#trying-it-without-a-control-plane))
 
 ### Installation
 
@@ -145,7 +153,7 @@ cp examples/github-mcp-server/.env.example examples/github-mcp-server/.env
 npm run dev                                                   # uv run github-mcp-server
 ```
 
-The Node sample listens on `:8787` and the Python one on `:8788` — different ports so both can run at once — and each redeems against the gateway URL in that `.env`.
+The Node sample listens on `:8787` and the Python one on `:8788`, different ports so both can run at once, and each redeems against the gateway URL in that `.env`.
 
 ### Install the library in your own server
 
@@ -162,11 +170,11 @@ pip install 'keydris-kit-reader[mcp]'   # if you serve with the MCP Python SDK
 
 ## Use it in your own server
 
-Four steps. The full version is in the library README for your language — [Node](node/packages/kit-reader/README.md), [Python](python/packages/kit-reader/README.md).
+Four steps. The full version is in the library README for your language: [Node](node/packages/kit-reader/README.md), [Python](python/packages/kit-reader/README.md).
 
 ### 1. Construct one reader at startup
 
-It holds no per-request state — only where to redeem — so one instance serves every connection.
+It holds no per-request state, only where to redeem, so one instance serves every connection.
 
 ```ts
 import { createKitReader } from '@keydris/kit-reader';
@@ -234,7 +242,7 @@ The applied value is always `prefix + value`, so the vault can express formats l
 | 2 | `_meta` token is a non-string or empty | No | The KIT action token is malformed |
 | 3 | Two tokenized `tools/call`s in one body | No | One token authorizes one action |
 | 4 | Tokenized call with empty `name`, or non-object `arguments` | No | The tokenized tool call is malformed |
-| 5 | `_meta` token differs from the header token | No | Conflicting tokens — refused, not resolved |
+| 5 | `_meta` token differs from the header token | No | Conflicting tokens, refused rather than resolved |
 | 6 | No token anywhere | No | Nothing to exchange for a credential |
 | 7 | Gateway unreachable, transport raised | Attempted | The gateway could not be reached |
 | 8 | Gateway refused with a code | Yes | The gateway refused: `{code}` |
@@ -270,7 +278,7 @@ See [SECURITY.md](SECURITY.md) for the full model, including what is deliberatel
 ```
 keydris-reader/
 ├── node/
-│   ├── packages/kit-reader/          @keydris/kit-reader — the published library
+│   ├── packages/kit-reader/          @keydris/kit-reader (the published library)
 │   │   └── src/
 │   │       ├── index.ts              public surface (re-exports only)
 │   │       ├── types.ts              wire shapes + the Redemption union
@@ -279,10 +287,10 @@ keydris-reader/
 │   │       ├── credentials.ts        applyCredentials(): header / query injection
 │   │       └── express.ts            optional /express subpath adapter
 │   ├── examples/github-mcp-server/   the sample server (private, not published)
-│   ├── Dockerfile, fly.toml          deployment — context spans both workspaces
+│   ├── Dockerfile, fly.toml          deployment; context spans both workspaces
 │   └── package.json                  npm workspaces root
 ├── python/
-│   ├── packages/kit-reader/          keydris-kit-reader — the published library
+│   ├── packages/kit-reader/          keydris-kit-reader (the published library)
 │   │   ├── src/keydris_kit_reader/
 │   │   │   ├── types.py              TypedDicts + Released / Refused dataclasses
 │   │   │   ├── token.py              the twin of token.ts
@@ -308,24 +316,24 @@ keydris-reader/
 | `gatewayUrl` | `gateway_url` | *required* | The control plane's redemption endpoint. Python requires `http(s)`. |
 | `tokenHeader` | `token_header` | `authorization` | Legacy header accepted as a fallback. Trimmed and lowercased. |
 | `fetch` | `transport` | global `fetch` / `urllib` | Injectable, for tests or an instrumented client. |
-| — | `timeout` | `10.0` | Seconds the default Python transport waits. |
+| n/a | `timeout` | `10.0` | Seconds the default Python transport waits. |
 
 ### Sample-server environment
 
 | Variable | Node default | Python default | Notes |
 | --- | --- | --- | --- |
-| `HOST` | — | `127.0.0.1` | Loopback by default. |
+| `HOST` | n/a | `127.0.0.1` | Loopback by default. |
 | `PORT` | `8787` | `8788` | Must match what the proxy dials; the gateway looks the credential up by that host. |
-| `KEYDRIS_GATEWAY_URL` | `http://localhost:8080/gateway/credentials` | same | Redemption endpoint. | *requires correct endpoint Jeet
+| `KEYDRIS_GATEWAY_URL` | `http://localhost:8080/gateway/credentials` | same | Redemption endpoint. |
 | `KEYDRIS_TOKEN_HEADER` | `authorization` | same | Must match the control plane's `ACCESS_TOKEN_INJECT_HEADER`. |
 | `GITHUB_API_BASE` | `https://api.github.com` | same | Point at a stub to exercise the flow offline. |
-| `KEYDRIS_ALLOWED_HOSTS` | — | unset | Python only, comma-separated. Without it the SDK answers 421 on non-localhost hosts. |
+| `KEYDRIS_ALLOWED_HOSTS` | n/a | unset | Python only, comma-separated. Without it the SDK answers 421 on non-localhost hosts. |
 
 ---
 
 ## Trying it without a control plane
 
-Point `KEYDRIS_GATEWAY_URL` at any stub that answers a `credentials` array, and `GITHUB_API_BASE` at a stub `/user`. The server does not verify the token itself — that is the gateway's job — so any string works as the bearer:
+Point `KEYDRIS_GATEWAY_URL` at any stub that answers a `credentials` array, and `GITHUB_API_BASE` at a stub `/user`. The server does not verify the token itself (that is the gateway's job), so any string works as the bearer:
 
 ```bash
 curl -X POST http://localhost:8787/mcp \
@@ -336,7 +344,7 @@ curl -X POST http://localhost:8787/mcp \
         "_meta":{"keydris/kit_action_token":"anything"}}}'
 ```
 
-Remove the `_meta` block and the same call returns the redemption failure instead — which is the whole demonstration. The sample READMEs have the long version: [Node](node/examples/github-mcp-server/README.md#trying-it-without-a-control-plane), [Python](python/examples/github-mcp-server/README.md#trying-it-without-a-control-plane).
+Remove the `_meta` block and the same call returns the redemption failure instead, which is the whole demonstration. The sample READMEs have the long version: [Node](node/examples/github-mcp-server/README.md#trying-it-without-a-control-plane), [Python](python/examples/github-mcp-server/README.md#trying-it-without-a-control-plane).
 
 ---
 
@@ -370,7 +378,7 @@ The wire behavior is identical. The differences are idiom and platform.
 
 CI runs two jobs on every pull request: *node* (`npm ci`, typecheck, test, build, `npm pack --dry-run`) and *python* (a 3.10 / 3.13 matrix through `ruff`, strict `mypy`, `pytest`, `uv build`, `twine check`).
 
-Releases are package-scoped tags so the two libraries version independently — `kit-reader-v*` for npm, `kit-reader-py-v*` for PyPI. Both workflows refuse to publish if the tag and the manifest disagree, and both use trusted publishing via GitHub OIDC: no npm token, no PyPI token, and a provenance attestation on every release.
+Releases are package-scoped tags so the two libraries version independently: `kit-reader-v*` for npm, `kit-reader-py-v*` for PyPI. Both workflows refuse to publish if the tag and the manifest disagree, and both use trusted publishing via GitHub OIDC, so there is no npm token, no PyPI token, and a provenance attestation on every release.
 
 ---
 
@@ -404,7 +412,7 @@ Yes. The `_meta` key, the redemption body, and the failure strings are identical
 
 ### What does the agent see when policy denies the call?
 
-A tool error whose text names the reason — for example *The Keydris gateway refused: policy_denied.* Redemption never raises, so the agent gets a sentence it can act on rather than an HTTP failure.
+A tool error whose text names the reason, for example *The Keydris gateway refused: policy_denied.* Redemption never raises, so the agent gets a sentence it can act on rather than an HTTP failure.
 
 ### Does this govern what my server does after it gets the credential?
 
@@ -449,7 +457,7 @@ By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 
-Licensed under the **Apache License 2.0** — free for personal, commercial, and private use, with an explicit patent grant and a requirement to preserve notices.
+Licensed under the **Apache License 2.0**: free for personal, commercial, and private use, with an explicit patent grant and a requirement to preserve notices.
 
 See [LICENSE](LICENSE) for the full text and [NOTICE](NOTICE) for attribution.
 
@@ -460,8 +468,8 @@ See [LICENSE](LICENSE) for the full text and [NOTICE](NOTICE) for attribution.
 Built on:
 
 - [Model Context Protocol](https://modelcontextprotocol.io/) and its [TypeScript](https://github.com/modelcontextprotocol/typescript-sdk) and [Python](https://github.com/modelcontextprotocol/python-sdk) SDKs
-- [Keydris](https://keydris.com/) — the proxy, gateway, and vault the tokens are redeemed against
+- [Keydris](https://keydris.com/), the proxy, gateway, and vault the tokens are redeemed against
 
 ---
 
-**If keydris-reader helped you, a star helps others find it.**
+**If keydris-reader took a secret out of one of your servers, a star helps others find it.**
