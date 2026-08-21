@@ -24,15 +24,8 @@
 
 <p align="center">
   <a href="https://keydris.com/">Website</a> ·
-  <a href="HOW-IT-WORKS.md">Docs</a> ·
   <a href="https://discord.gg/3JUcXkUTu">Discord</a>
 </p>
-
----
-
-## Documentation
-
-**[Read HOW-IT-WORKS.md](HOW-IT-WORKS.md)** is a full walkthrough of both libraries: the wire contract, every branch the code can take, the complete outcome table, and how the two sample servers wire it up.
 
 ---
 
