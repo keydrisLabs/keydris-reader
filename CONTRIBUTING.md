@@ -35,7 +35,6 @@ If you are only fixing a typo in a comment or a README, none of this applies.
 | [`node/examples/github-mcp-server`](node/examples/github-mcp-server) | Sample server (private, never published) |
 | [`python/packages/kit-reader`](python/packages/kit-reader) | `keydris-kit-reader`, published |
 | [`python/examples/github-mcp-server`](python/examples/github-mcp-server) | Sample server (never published) |
-| [`HOW-IT-WORKS.md`](HOW-IT-WORKS.md) | The long-form explanation of both |
 
 The split between library and sample is load-bearing. The library stays dependency-free and
 framework-agnostic; anything framework-specific belongs in the sample or behind an optional adapter.
