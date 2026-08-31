@@ -181,6 +181,6 @@ that downstream call would mean routing the server's egress through Keydris too.
 ## Non-security questions
 
 For usage questions, integration help, or design discussion, use
-[Discord](https://discord.gg/3JUcXkUTu) or the
+[Discord](https://discord.gg/mHN8z7qYRV) or the
 [issue tracker](https://github.com/keydrisLabs/keydris-reader/issues). Keep vulnerability reports to
 the private channels above.

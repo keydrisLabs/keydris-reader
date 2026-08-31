@@ -10,7 +10,7 @@
 ![Python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
 ![Dependencies](https://img.shields.io/badge/runtime%20dependencies-zero-brightgreen)
-[![Discord](https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/3JUcXkUTu)
+[![Discord](https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/mHN8z7qYRV)
 
 ---
 
@@ -24,7 +24,7 @@
 
 <p align="center">
   <a href="https://keydris.com/">Website</a> ·
-  <a href="https://discord.gg/3JUcXkUTu">Discord</a>
+  <a href="https://discord.gg/mHN8z7qYRV">Discord</a>
 </p>
 
 ---
@@ -428,7 +428,7 @@ Do not open a public issue for a vulnerability, and do not report one on Discord
 | Where | For what |
 | --- | --- |
 | [keydris.com](https://keydris.com/) | The proxy, gateway, and vault this library redeems against |
-| [Discord](https://discord.gg/3JUcXkUTu) | Questions, integration help, and what to build next |
+| [Discord](https://discord.gg/mHN8z7qYRV) | Questions, integration help, and what to build next |
 | [Issues](https://github.com/keydrisLabs/keydris-reader/issues) | Bugs and feature requests, in public |
 | [Security](SECURITY.md) | Vulnerabilities, privately |
 

@@ -4,7 +4,7 @@ Thanks for helping out. This repository holds two implementations of one library
 plus a sample server for each, and the thing that makes it unusual is that **the two must stay
 byte-identical on the wire**. Most of the guidance below follows from that.
 
-Questions and design discussion are welcome in [Discord](https://discord.gg/3JUcXkUTu) or an
+Questions and design discussion are welcome in [Discord](https://discord.gg/mHN8z7qYRV) or an
 [issue](https://github.com/keydrisLabs/keydris-reader/issues). Vulnerabilities go through
 [SECURITY.md](SECURITY.md) instead, never a public issue.
 

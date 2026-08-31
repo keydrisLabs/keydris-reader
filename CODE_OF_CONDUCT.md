@@ -54,7 +54,7 @@ decisions when appropriate.
 
 This Code of Conduct applies within all community spaces, including the
 repository's issues and pull requests and the project
-[Discord](https://discord.gg/3JUcXkUTu), and also applies when an individual is
+[Discord](https://discord.gg/mHN8z7qYRV), and also applies when an individual is
 officially representing the community in public spaces. Examples of representing our community include using an
 official email address, posting via an official social media account, or acting
 as an appointed representative at an online or offline event.
