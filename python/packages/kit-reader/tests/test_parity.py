@@ -14,12 +14,13 @@ from typing import Any
 
 import pytest
 
-from keydris_kit_reader import GatewayReply, KitReader, Refused
+from keydris_kit_reader import GatewayReply, KitReader, KitTarget, Refused
 
 NODE_SOURCE = Path(__file__).resolve().parents[4] / "node" / "packages" / "kit-reader" / "src"
 
 HEADER = "x-keydris-token"
 CODE = "policy_denied"
+TARGET: KitTarget = {"host": "api.github.com", "path": "/user", "method": "GET"}
 
 
 async def refuse(url: str, *, headers: Mapping[str, str], body: bytes) -> GatewayReply:
@@ -34,7 +35,7 @@ def tool_call(token: str | None = None) -> dict[str, Any]:
 
 
 async def every_problem() -> list[str]:
-    """One of each: the four the parser can report and the four the exchange can."""
+    """One of each: the five the parser can report and the five the exchange can."""
     reader = KitReader(gateway_url="https://gateway.test/x", token_header=HEADER, transport=refuse)
     malformed = tool_call()
     malformed["params"]["_meta"] = {"keydris/kit_action_token": 42}
@@ -43,6 +44,9 @@ async def every_problem() -> list[str]:
 
     async def empty(url: str, *, headers: Mapping[str, str], body: bytes) -> GatewayReply:
         return GatewayReply(200, b'{"credentials":[]}')
+
+    async def misshapen(url: str, *, headers: Mapping[str, str], body: bytes) -> GatewayReply:
+        return GatewayReply(200, b'{"credentials":[{"type":"cookie"}]}')
 
     async def unreachable(url: str, *, headers: Mapping[str, str], body: bytes) -> GatewayReply:
         raise ConnectionRefusedError
@@ -54,11 +58,15 @@ async def every_problem() -> list[str]:
         await reader.redeem(tool_call("action-token"), header="other-token"),
         await reader.redeem(tool_call()),
         await reader.redeem(tool_call("action-token")),
+        await reader.redeem(tool_call("action-token"), target=TARGET),
         await KitReader(gateway_url="https://gateway.test/x", transport=empty).redeem(
-            tool_call("action-token")
+            tool_call("action-token"), target=TARGET
+        ),
+        await KitReader(gateway_url="https://gateway.test/x", transport=misshapen).redeem(
+            tool_call("action-token"), target=TARGET
         ),
         await KitReader(gateway_url="https://gateway.test/x", transport=unreachable).redeem(
-            tool_call("action-token")
+            tool_call("action-token"), target=TARGET
         ),
     ]
     problems = [r.problem for r in redemptions if isinstance(r, Refused)]

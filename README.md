@@ -51,7 +51,8 @@ agent ──► proxy ──► POST /v1/runtime/mcp/kit-action-tokens ──►
                     params._meta["keydris/kit_action_token"] = token
                                                             ──► the MCP server
                     the MCP server ──► POST /gateway/credentials
-                                      {token, mcp:{method, action_name, parameters}}
+                                      {token, mcp:{method, action_name, parameters},
+                                              target:{host, path, method}}
                                    ◄── {credentials:[{type,name,prefix,value}]}
                     the MCP server ──► the upstream API  (credential applied)
 ```
@@ -105,9 +106,15 @@ The split between **library** and **sample** is deliberate. The library is what 
     "method": "tools/call",
     "action_name": "github_whoami",
     "parameters": { "verbose": true }
-  }
+  },
+  "target": { "host": "api.github.com", "path": "/user", "method": "GET" }
 }
 ```
+
+The `target` names the downstream request the credential is for — hostname without port, path
+without query — and the gateway requires it for every KIT redemption: it is what vault host/path
+patterns and credential policy are evaluated against. A legacy header token is sent alone, with
+neither `mcp` nor `target`.
 
 ### What comes back
 
@@ -181,47 +188,52 @@ from keydris_kit_reader import KitReader
 reader = KitReader(gateway_url=os.environ["KEYDRIS_GATEWAY_URL"])
 ```
 
-### 2. Redeem per request
+### 2. Arm a one-shot spend per request
 
-Use the optional adapter, or call the reader directly on the JSON-RPC body from any framework.
+The gateway redeems a KIT action token only together with the downstream `target` (host, path,
+method) of the request it authorizes — which is known inside the tool at fetch time, not when the
+MCP request arrives. So the adapter does not redeem: it arms a spend the tool calls once.
 
 ```ts
-import { keydrisCredentials } from '@keydris/kit-reader/express';
+import { keydrisCredentials, kitSpendFrom } from '@keydris/kit-reader/express';
 
 app.post('/mcp', express.json(), keydrisCredentials(reader), async (req, res) => {
-  const server = createYourMcpServer(req.redemption); // build per request
+  const server = createYourMcpServer(kitSpendFrom(req)); // build per request
   // ...connect a transport and handle the request
 });
 ```
 
 ```python
-from keydris_kit_reader.mcp import current_redemption, keydris_credentials
+from keydris_kit_reader.mcp import current_spend, keydris_credentials
 
 mcp = MCPServer("your-server", middleware=[keydris_credentials(reader)])
 ```
 
-### 3. Report a refusal as a tool error, do not throw
+### 3. Spend it once, at fetch time
+
+In Node, `keydrisFetch` does the whole exchange — derives the target from the URL, redeems,
+applies the released credentials, and sends:
 
 ```ts
-if (!redemption?.ok) {
-  return { content: [{ type: 'text', text: redemption?.problem ?? 'No credential was released.' }], isError: true };
+import { keydrisFetch } from '@keydris/kit-reader';
+
+const result = await keydrisFetch(spend, 'https://api.github.com/user', { headers });
+if (!result.ok) {
+  return { content: [{ type: 'text', text: result.problem }], isError: true };
 }
+// result.response is the upstream Response
 ```
+
+In Python, call the spend with the target, then apply:
 
 ```python
-if redemption is None or not redemption.ok:
-    raise ToolError(redemption.problem if redemption else "No credential was released.")
-```
-
-### 4. Spend it once, on the stack
-
-```ts
-applyCredentials(redemption.credentials, url, headers);   // mutates both
-```
-
-```python
+redemption = await current_spend()({"host": "api.github.com", "path": "/user", "method": "GET"})
+if not redemption.ok:
+    raise ToolError(redemption.problem)
 url = apply_credentials(redemption.credentials, url, headers)   # headers in place, URL returned
 ```
+
+A refusal is a readable `problem` for the agent — report it as a tool error, do not throw.
 
 The applied value is always `prefix + value`, so the vault can express formats like `Bearer {value}` or `v1_{value}` without your server hard-coding them.
 
@@ -237,13 +249,14 @@ The applied value is always `prefix + value`, so the vault can express formats l
 | 4 | Tokenized call with empty `name`, or non-object `arguments` | No | The tokenized tool call is malformed |
 | 5 | `_meta` token differs from the header token | No | Conflicting tokens, refused rather than resolved |
 | 6 | No token anywhere | No | Nothing to exchange for a credential |
-| 7 | Gateway unreachable, transport raised | Attempted | The gateway could not be reached |
-| 8 | Gateway refused with a code | Yes | The gateway refused: `{code}` |
-| 9 | Gateway refused with no readable code | Yes | The gateway refused: HTTP `{status}` |
-| 10 | 2xx with no credentials | Yes | The gateway released nothing |
-| 11 | Credentials released | Yes | `{ok: true, credentials}` / `Released(...)` |
+| 7 | KIT action token with no downstream `target` | No | The redemption needs the target (host, path, method) |
+| 8 | Gateway unreachable, transport raised | Attempted | The gateway could not be reached |
+| 9 | Gateway refused with a code | Yes | The gateway refused: `{code}` |
+| 10 | Gateway refused with no readable code | Yes | The gateway refused: HTTP `{status}` |
+| 11 | 2xx with no credentials | Yes | The gateway released nothing |
+| 12 | Credentials released | Yes | `{ok: true, credentials}` / `Released(...)` |
 
-Rows 2 through 6 are the reason the library is worth having: five distinct ways a request can be un-redeemable, each answered before a network call, each with a sentence the agent can act on. Those exact strings are part of the wire contract.
+Rows 2 through 7 are the reason the library is worth having: six distinct ways a request can be un-redeemable, each answered before a network call, each with a sentence the agent can act on. Those exact strings are part of the wire contract.
 
 ---
 
@@ -278,7 +291,8 @@ keydris-reader/
 │   │       ├── token.ts              _meta extraction, Bearer stripping, batch rules
 │   │       ├── redeem.ts             createKitReader(): decision tree + gateway POST
 │   │       ├── credentials.ts        applyCredentials(): header / query injection
-│   │       └── express.ts            optional /express subpath adapter
+│   │       ├── fetch.ts              keydrisFetch(): derive target, spend, apply, send
+│   │       └── express.ts            optional /express subpath adapter (arms req.kitSpend)
 │   ├── examples/github-mcp-server/   the sample server (private, not published)
 │   ├── Dockerfile, fly.toml          deployment; context spans both workspaces
 │   └── package.json                  npm workspaces root
@@ -354,7 +368,7 @@ The wire behavior is identical. The differences are idiom and platform.
 | Result type | discriminated union on `ok` | `Released` / `Refused` dataclasses with `Literal["ok"]` |
 | Secret in reprs | not addressed | `Released.__repr__` redacted |
 | Applying a credential | mutates `URL` and `Headers` | mutates headers, returns the new URL |
-| Adapter | Express middleware, `req.redemption` | MCP-SDK middleware, `current_redemption()` |
+| Adapter | Express middleware, `req.kitSpend` via `kitSpendFrom(req)` | MCP-SDK middleware, `current_spend()` |
 | Scope teardown | integrator's job (per-request server) | ContextVar reset in `finally` |
 
 ---

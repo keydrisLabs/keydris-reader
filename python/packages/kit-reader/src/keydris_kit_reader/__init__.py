@@ -13,10 +13,12 @@ from keydris_kit_reader.transport import GatewayReply, Transport, urllib_transpo
 from keydris_kit_reader.types import (
     CredentialEnvelope,
     KitActionContext,
+    KitTarget,
     McpActionCall,
     Redemption,
     Refused,
     Released,
+    TargetMethod,
     TokenLookup,
 )
 
@@ -26,10 +28,12 @@ __all__ = [
     "GatewayReply",
     "KitActionContext",
     "KitReader",
+    "KitTarget",
     "McpActionCall",
     "Redemption",
     "Refused",
     "Released",
+    "TargetMethod",
     "TokenLookup",
     "Transport",
     "apply_credentials",

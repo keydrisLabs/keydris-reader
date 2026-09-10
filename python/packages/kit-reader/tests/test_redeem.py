@@ -9,13 +9,22 @@ from typing import Any
 
 import pytest
 
-from keydris_kit_reader import CredentialEnvelope, GatewayReply, KitReader, Refused, Released
+from keydris_kit_reader import (
+    CredentialEnvelope,
+    GatewayReply,
+    KitReader,
+    KitTarget,
+    Refused,
+    Released,
+)
 
 GATEWAY = "https://gateway.test/gateway/credentials"
 
 RELEASED: list[CredentialEnvelope] = [
     {"type": "header", "name": "Authorization", "prefix": "", "value": "Bearer ghp_x"}
 ]
+
+TARGET: KitTarget = {"host": "api.github.com", "path": "/user", "method": "GET"}
 
 
 @dataclass
@@ -45,11 +54,13 @@ def tool_call(token: str | None = None, arguments: dict[str, Any] | None = None)
     return {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": params}
 
 
-async def test_sends_the_token_with_the_call_it_authorizes() -> None:
+async def test_sends_the_token_with_the_call_it_authorizes_and_its_target() -> None:
     gateway = GatewayStub(body={"credentials": RELEASED})
     reader = reader_for(gateway)
 
-    redemption = await reader.redeem(tool_call("action-token", {"verbose": True}))
+    redemption = await reader.redeem(
+        tool_call("action-token", {"verbose": True}), target=TARGET
+    )
 
     assert redemption == Released(credentials=tuple(RELEASED))
     assert len(gateway.calls) == 1
@@ -61,7 +72,23 @@ async def test_sends_the_token_with_the_call_it_authorizes() -> None:
             "action_name": "github_whoami",
             "parameters": {"verbose": True},
         },
+        "target": TARGET,
     }
+
+
+async def test_refuses_a_tokenized_call_that_names_no_downstream_target() -> None:
+    gateway = GatewayStub(body={"credentials": RELEASED})
+    reader = reader_for(gateway)
+
+    redemption = await reader.redeem(tool_call("action-token"))
+
+    assert redemption == Refused(
+        problem=(
+            "A KIT action token redemption needs the downstream target "
+            "(host, path, method) of the request it authorizes."
+        )
+    )
+    assert gateway.calls == []
 
 
 async def test_costs_nothing_for_initialize_and_tools_list() -> None:
@@ -127,7 +154,7 @@ async def test_reports_a_refusal_by_the_code_the_gateway_named() -> None:
     gateway = GatewayStub(status=403, body={"error": {"code": "policy_denied"}})
     reader = reader_for(gateway)
 
-    assert await reader.redeem(tool_call("action-token")) == Refused(
+    assert await reader.redeem(tool_call("action-token"), target=TARGET) == Refused(
         problem="The Keydris gateway refused: policy_denied."
     )
 
@@ -136,7 +163,7 @@ async def test_falls_back_to_the_status_when_the_refusal_carries_no_code() -> No
     gateway = GatewayStub(status=502, body={})
     reader = reader_for(gateway)
 
-    assert await reader.redeem(tool_call("action-token")) == Refused(
+    assert await reader.redeem(tool_call("action-token"), target=TARGET) == Refused(
         problem="The Keydris gateway refused: HTTP 502."
     )
 
@@ -145,16 +172,35 @@ async def test_reports_an_empty_release_rather_than_pretending_it_succeeded() ->
     gateway = GatewayStub(body={"credentials": []})
     reader = reader_for(gateway)
 
-    assert await reader.redeem(tool_call("action-token")) == Refused(
+    assert await reader.redeem(tool_call("action-token"), target=TARGET) == Refused(
         problem="The Keydris gateway released nothing."
     )
+
+
+async def test_refuses_a_release_whose_envelopes_are_not_the_gateway_shape() -> None:
+    for credentials in [
+        [{"type": "cookie", "name": "session", "prefix": "", "value": "s"}],
+        [{"type": "header", "name": "", "prefix": "", "value": "s"}],
+        [{"type": "header", "name": "Authorization", "prefix": "", "value": 42}],
+        [RELEASED[0], {"type": "header"}],
+        ["not an envelope"],
+    ]:
+        gateway = GatewayStub(body={"credentials": credentials})
+        reader = reader_for(gateway)
+
+        assert await reader.redeem(tool_call("action-token"), target=TARGET) == Refused(
+            problem=(
+                "The Keydris gateway returned a credential in a shape "
+                "this reader does not recognize."
+            )
+        )
 
 
 async def test_reports_an_unreachable_gateway_instead_of_raising() -> None:
     gateway = GatewayStub(throws=True)
     reader = reader_for(gateway)
 
-    assert await reader.redeem(tool_call("action-token")) == Refused(
+    assert await reader.redeem(tool_call("action-token"), target=TARGET) == Refused(
         problem="The Keydris gateway could not be reached."
     )
 
@@ -168,7 +214,7 @@ async def test_survives_a_gateway_that_answers_with_something_other_than_json() 
 
     reader = KitReader(gateway_url=GATEWAY, transport=NotJson())
 
-    assert await reader.redeem(tool_call("action-token")) == Refused(
+    assert await reader.redeem(tool_call("action-token"), target=TARGET) == Refused(
         problem="The Keydris gateway refused: HTTP 500."
     )
 
@@ -183,3 +229,18 @@ def test_a_released_credential_does_not_print() -> None:
 def test_refuses_a_gateway_url_that_could_not_receive_a_token() -> None:
     with pytest.raises(ValueError, match="http"):
         KitReader(gateway_url="file:///etc/passwd")
+
+
+def test_refuses_plaintext_http_to_a_non_loopback_host_by_default() -> None:
+    with pytest.raises(ValueError, match="plaintext http"):
+        KitReader(gateway_url="http://gateway.internal/x")
+
+
+def test_accepts_loopback_http_and_non_loopback_only_when_explicitly_allowed() -> None:
+    for url in (
+        "http://localhost:8080/gateway/credentials",
+        "http://127.0.0.1:8080/gateway/credentials",
+        "http://[::1]:8080/gateway/credentials",
+    ):
+        KitReader(gateway_url=url)
+    KitReader(gateway_url="http://gateway.internal/x", allow_insecure_gateway_url=True)

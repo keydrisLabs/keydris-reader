@@ -8,10 +8,12 @@ from typing import Any, Literal, TypedDict
 __all__ = [
     "CredentialEnvelope",
     "KitActionContext",
+    "KitTarget",
     "McpActionCall",
     "Redemption",
     "Refused",
     "Released",
+    "TargetMethod",
     "TokenLookup",
 ]
 
@@ -38,6 +40,23 @@ class KitActionContext(TypedDict):
     action that is really about to happen."""
 
     mcp: McpActionCall
+
+
+TargetMethod = Literal["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
+"""HTTP methods the gateway's `target` schema accepts."""
+
+
+class KitTarget(TypedDict):
+    """The downstream request the credential is for.
+
+    The gateway matches it against the vault's host/path patterns and evaluates
+    policy against it, so it must name the request that is really about to
+    leave — hostname without port, path without query string.
+    """
+
+    host: str
+    path: str
+    method: TargetMethod
 
 
 @dataclass(frozen=True, slots=True, repr=False)

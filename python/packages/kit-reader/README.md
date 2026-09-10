@@ -11,7 +11,8 @@ for the one outbound request it authorizes.
 proxy ──► POST /mcp
           params._meta["keydris/kit_action_token"] = token
                                                   ──► your server
-          your server ──► POST {gateway_url}  {token, mcp:{action_name, parameters}}
+          your server ──► POST {gateway_url}  {token, mcp:{action_name, parameters},
+                                               target:{host, path, method}}
                        ◄── {credentials:[{type,name,prefix,value}]}
           your server ──► the upstream API, credential applied
 ```
@@ -39,12 +40,14 @@ reader = KitReader(gateway_url="https://api.keydris.com/gateway/credentials")
 
 ### With the MCP Python SDK
 
-`keydris_kit_reader.mcp` is a middleware factory. Register it on the server once; it leaves the
-result on `current_redemption()` for the duration of the call.
+`keydris_kit_reader.mcp` is a middleware factory. The gateway redeems a KIT action token only
+together with the downstream `target` (host, path, method) of the request it authorizes — which is
+known inside the tool at request time, not when the MCP request arrives. So the middleware does not
+redeem: it arms a one-shot spend, reachable via `current_spend()` for the duration of the call.
 
 ```python
 from mcp.server import MCPServer
-from keydris_kit_reader.mcp import current_redemption, keydris_credentials
+from keydris_kit_reader.mcp import current_spend, keydris_credentials
 
 mcp = MCPServer("your-server", middleware=[keydris_credentials(reader)])
 ```
@@ -52,25 +55,31 @@ mcp = MCPServer("your-server", middleware=[keydris_credentials(reader)])
 ### With anything else
 
 The middleware is a small convenience over one call. A raw Starlette route, FastAPI, a Lambda
-handler, or an stdio loop all use the reader directly, on the JSON-RPC body:
+handler, or an stdio loop all use the reader directly, on the JSON-RPC body — at the moment the
+outbound request is known:
 
 ```python
-redemption = await reader.redeem(body, header=request.headers.get(reader.token_header))
+redemption = await reader.redeem(
+    body,
+    header=request.headers.get(reader.token_header),
+    target={"host": "api.github.com", "path": "/user", "method": "GET"},
+)
 ```
 
 ### Then spend it
 
-Inside the tool handler, `apply_credentials` puts the released envelope onto the outbound request —
-as a header or a query parameter, whichever the vault entry specified.
+Inside the tool handler, call the spend with the target of the one outbound request — hostname
+without port, path without query — then `apply_credentials` puts the released envelope onto it, as
+a header or a query parameter, whichever the vault entry specified.
 
 ```python
 from keydris_kit_reader import apply_credentials
-from keydris_kit_reader.mcp import current_redemption
+from keydris_kit_reader.mcp import current_spend
 from mcp.server.mcpserver.exceptions import ToolError
 
-redemption = current_redemption()
-if redemption is None or not redemption.ok:
-    raise ToolError(redemption.problem if redemption else "No credential was released.")
+redemption = await current_spend()({"host": "api.github.com", "path": "/user", "method": "GET"})
+if not redemption.ok:
+    raise ToolError(redemption.problem)
 
 headers = {"accept": "application/json"}
 url = apply_credentials(redemption.credentials, "https://api.github.com/user", headers)
@@ -88,9 +97,10 @@ text is the message, which is what makes a refusal readable rather than a crash.
   anything else that invokes no tool — the gateway is never called. A client with no token can still
   connect and see what is on offer; it discovers it needs one only when it asks for something that
   reveals a credential.
-- **One token authorizes one action.** Redemption sends the tool name and the exact arguments
-  alongside the token, so the gateway evaluates policy against the call that is really about to
-  happen. A batch that reuses a token is refused before the gateway is touched.
+- **One token authorizes one action.** Redemption sends the tool name, the exact arguments, and
+  the downstream target alongside the token, so the gateway evaluates policy against the call that
+  is really about to happen. A batch that reuses a token is refused before the gateway is touched,
+  and so is a second spend of an already-spent request.
 - **Failures are answers, not crashes.** `redeem()` never raises. A missing token, a malformed one, a
   gateway refusal naming its code, an unreachable gateway — each comes back as
   `Refused(problem=...)` for you to return as a tool error the agent can read.
@@ -100,7 +110,7 @@ text is the message, which is what makes a refusal readable rather than a crash.
 Two things are yours to get right, because the library cannot enforce them:
 
 - **Serve stateless.** A long-lived session outlives the short-lived token that authorized it. The
-  middleware scopes each redemption to the call it was released for and drops it on the way out;
+  middleware scopes each spend to the call it was armed for and drops it on the way out;
   don't lift one out of that scope, and never cache a `Redemption`.
 - **Never log `credentials`.** Log the `problem` side freely; it carries no secret.
 
@@ -120,7 +130,7 @@ KitReader(*, gateway_url, token_header="authorization", transport=None, timeout=
 ```python
 reader.token_header -> str                      # lowercased
 reader.calls_a_tool(body) -> bool
-await reader.redeem(body, *, header=None) -> Redemption | None
+await reader.redeem(body, *, header=None, target=None) -> Redemption | None
 
 Redemption = Released | Refused
 Released(credentials: tuple[CredentialEnvelope, ...], ok: Literal[True])

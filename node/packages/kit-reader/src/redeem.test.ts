@@ -47,13 +47,16 @@ function toolCall(token?: string, arguments_: Record<string, unknown> = {}) {
   };
 }
 
+const TARGET = { host: 'api.github.com', path: '/user', method: 'GET' as const };
+
 void describe('redemption', () => {
-  void it('sends the token with the call it authorizes, and returns the credentials', async () => {
+  void it('sends the token with the call it authorizes and its target, and returns the credentials', async () => {
     const gateway = gatewayStub({ body: { credentials: RELEASED } });
     const reader = createKitReader({ gatewayUrl: GATEWAY, fetch: gateway.fetch });
 
     const redemption = await reader.redeem(
       toolCall('action-token', { verbose: true }),
+      { target: TARGET },
     );
 
     assert.deepEqual(redemption, { ok: true, credentials: RELEASED });
@@ -66,7 +69,22 @@ void describe('redemption', () => {
         action_name: 'github_whoami',
         parameters: { verbose: true },
       },
+      target: TARGET,
     });
+  });
+
+  void it('refuses a tokenized call that names no downstream target', async () => {
+    const gateway = gatewayStub({ body: { credentials: RELEASED } });
+    const reader = createKitReader({ gatewayUrl: GATEWAY, fetch: gateway.fetch });
+
+    const redemption = await reader.redeem(toolCall('action-token'));
+
+    assert.deepEqual(redemption, {
+      ok: false,
+      problem:
+        'A KIT action token redemption needs the downstream target (host, path, method) of the request it authorizes.',
+    });
+    assert.equal(gateway.calls.length, 0);
   });
 
   void it('costs nothing for initialize and tools/list', async () => {
@@ -156,7 +174,7 @@ void describe('redemption', () => {
     });
     const reader = createKitReader({ gatewayUrl: GATEWAY, fetch: gateway.fetch });
 
-    assert.deepEqual(await reader.redeem(toolCall('action-token')), {
+    assert.deepEqual(await reader.redeem(toolCall('action-token'), { target: TARGET }), {
       ok: false,
       problem: 'The Keydris gateway refused: policy_denied.',
     });
@@ -166,7 +184,7 @@ void describe('redemption', () => {
     const gateway = gatewayStub({ status: 502, body: {} });
     const reader = createKitReader({ gatewayUrl: GATEWAY, fetch: gateway.fetch });
 
-    assert.deepEqual(await reader.redeem(toolCall('action-token')), {
+    assert.deepEqual(await reader.redeem(toolCall('action-token'), { target: TARGET }), {
       ok: false,
       problem: 'The Keydris gateway refused: HTTP 502.',
     });
@@ -176,7 +194,7 @@ void describe('redemption', () => {
     const gateway = gatewayStub({ body: { credentials: [] } });
     const reader = createKitReader({ gatewayUrl: GATEWAY, fetch: gateway.fetch });
 
-    assert.deepEqual(await reader.redeem(toolCall('action-token')), {
+    assert.deepEqual(await reader.redeem(toolCall('action-token'), { target: TARGET }), {
       ok: false,
       problem: 'The Keydris gateway released nothing.',
     });
@@ -186,9 +204,83 @@ void describe('redemption', () => {
     const gateway = gatewayStub({ throws: true });
     const reader = createKitReader({ gatewayUrl: GATEWAY, fetch: gateway.fetch });
 
-    assert.deepEqual(await reader.redeem(toolCall('action-token')), {
+    assert.deepEqual(await reader.redeem(toolCall('action-token'), { target: TARGET }), {
       ok: false,
       problem: 'The Keydris gateway could not be reached.',
     });
+  });
+
+  void it('refuses a release whose envelopes are not the shape the gateway publishes', async () => {
+    for (const credentials of [
+      [{ type: 'cookie', name: 'session', prefix: '', value: 's' }],
+      [{ type: 'header', name: '', prefix: '', value: 's' }],
+      [{ type: 'header', name: 'Authorization', prefix: '', value: 42 }],
+      [RELEASED[0], { type: 'header' }],
+      ['not an envelope'],
+    ]) {
+      const gateway = gatewayStub({ body: { credentials } });
+      const reader = createKitReader({ gatewayUrl: GATEWAY, fetch: gateway.fetch });
+
+      assert.deepEqual(
+        await reader.redeem(toolCall('action-token'), { target: TARGET }),
+        {
+          ok: false,
+          problem:
+            'The Keydris gateway returned a credential in a shape this reader does not recognize.',
+        },
+      );
+    }
+  });
+
+  void it('bounds the redemption with an abort signal so a hung gateway cannot hang the tool call', async () => {
+    let signal: AbortSignal | null | undefined;
+    const fetchSpy: typeof globalThis.fetch = async (_input, init) => {
+      signal = init?.signal;
+      return new Response(JSON.stringify({ credentials: RELEASED }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    };
+    const reader = createKitReader({ gatewayUrl: GATEWAY, fetch: fetchSpy });
+
+    const redemption = await reader.redeem(toolCall('action-token'), {
+      target: TARGET,
+    });
+
+    assert.deepEqual(redemption, { ok: true, credentials: RELEASED });
+    assert.ok(signal instanceof AbortSignal);
+  });
+});
+
+void describe('gateway URL validation', () => {
+  void it('refuses a URL that could not receive a token', () => {
+    assert.throws(
+      () => createKitReader({ gatewayUrl: 'file:///etc/passwd' }),
+      /http\(s\)/,
+    );
+    assert.throws(() => createKitReader({ gatewayUrl: 'not a url' }), /http\(s\)/);
+  });
+
+  void it('refuses plaintext http to a non-loopback host by default', () => {
+    assert.throws(
+      () => createKitReader({ gatewayUrl: 'http://gateway.internal/x' }),
+      /plaintext http/,
+    );
+  });
+
+  void it('accepts loopback http, and non-loopback only when explicitly allowed', () => {
+    for (const url of [
+      'http://localhost:8080/gateway/credentials',
+      'http://127.0.0.1:8080/gateway/credentials',
+      'http://[::1]:8080/gateway/credentials',
+    ]) {
+      assert.ok(createKitReader({ gatewayUrl: url }));
+    }
+    assert.ok(
+      createKitReader({
+        gatewayUrl: 'http://gateway.internal/x',
+        allowInsecureGatewayUrl: true,
+      }),
+    );
   });
 });

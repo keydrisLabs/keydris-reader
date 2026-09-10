@@ -1,5 +1,5 @@
 import { createKitReader } from '@keydris/kit-reader';
-import { keydrisCredentials } from '@keydris/kit-reader/express';
+import { keydrisCredentials, kitSpendFrom } from '@keydris/kit-reader/express';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import express from 'express';
 import { config } from './config.js';
@@ -27,8 +27,10 @@ app.get('/healthz', (_req, res) => {
 
 app.post('/mcp', keydrisCredentials(reader), async (req, res) => {
   // Stateless: no session id, a fresh server and transport per request. The MCP
-  // session would otherwise outlive the access token that authorized it.
-  const server = createServer(req.redemption);
+  // session would otherwise outlive the access token that authorized it. The
+  // middleware armed a one-shot spend; the tool redeems it at fetch time, when
+  // the downstream target is known.
+  const server = createServer(kitSpendFrom(req));
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
   });

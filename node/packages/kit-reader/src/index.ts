@@ -1,4 +1,5 @@
 export { applyCredentials } from './credentials.js';
+export { keydrisFetch, type KeydrisFetchResult } from './fetch.js';
 export { createKitReader } from './redeem.js';
 export {
   callsATool,
@@ -10,6 +11,9 @@ export type {
   KitActionContext,
   KitReader,
   KitReaderOptions,
+  KitSpend,
+  KitTarget,
   Redemption,
+  TargetMethod,
   TokenLookup,
 } from './types.js';

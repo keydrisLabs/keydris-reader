@@ -11,7 +11,8 @@ for the one outbound request it authorizes.
 proxy ──► POST /mcp
           params._meta["keydris/kit_action_token"] = token
                                                   ──► your server
-          your server ──► POST {gatewayUrl}  {token, mcp:{action_name, parameters}}
+          your server ──► POST {gatewayUrl}  {token, mcp:{action_name, parameters},
+                                              target:{host, path, method}}
                        ◄── {credentials:[{type,name,prefix,value}]}
           your server ──► the upstream API, credential applied
 ```
@@ -40,46 +41,54 @@ const reader = createKitReader({
 
 ### With Express
 
-The `/express` subpath is a middleware factory. It leaves the result on `req.redemption`, and
-importing it is what adds that property to the `Request` type.
+The `/express` subpath is a middleware factory. The gateway redeems a KIT action token only
+together with the downstream `target` (host, path, method) of the request it authorizes — which is
+known inside the tool at fetch time, not when the MCP request arrives. So the middleware does not
+redeem: it arms a one-shot spend on `req.kitSpend` (importing the subpath is what adds that
+property to the `Request` type), and the tool spends it on the one outbound request it makes.
 
 ```ts
-import { keydrisCredentials } from '@keydris/kit-reader/express';
+import { keydrisCredentials, kitSpendFrom } from '@keydris/kit-reader/express';
 
 app.post('/mcp', express.json(), keydrisCredentials(reader), async (req, res) => {
-  const server = createYourMcpServer(req.redemption); // build per request
+  const server = createYourMcpServer(kitSpendFrom(req)); // build per request
   // …connect a transport and handle the request
 });
 ```
 
 ### With anything else
 
-The middleware is a nine-line convenience over one call. Fastify, Hono, a Lambda handler, or a raw
-`node:http` server all use the reader directly:
+The middleware is a small convenience over one call. Fastify, Hono, a Lambda handler, or a raw
+`node:http` server all use the reader directly — at the moment the outbound request is known:
 
 ```ts
 const redemption = await reader.redeem(jsonRpcBody, {
   header: request.headers[reader.tokenHeader], // optional legacy fallback
+  target: { host: 'api.github.com', path: '/user', method: 'GET' },
 });
 ```
 
 ### Then spend it
 
-Inside the tool handler, `applyCredentials` puts the released envelope onto the outbound request —
-as a header or a query parameter, whichever the vault entry specified.
+Inside the tool handler, `keydrisFetch` does the whole exchange: derives the target from the URL
+(hostname without port, path without query), spends the token, applies the released envelope — as
+a header or a query parameter, whichever the vault entry specified — and sends. The secret never
+appears in tool code.
 
 ```ts
-import { applyCredentials } from '@keydris/kit-reader';
+import { keydrisFetch } from '@keydris/kit-reader';
 
-if (!redemption?.ok) {
-  return { content: [{ type: 'text', text: redemption?.problem ?? 'No credential was released.' }], isError: true };
+const result = await keydrisFetch(spend, new URL('/user', 'https://api.github.com'), {
+  headers: { accept: 'application/json' },
+});
+if (!result.ok) {
+  return { content: [{ type: 'text', text: result.problem }], isError: true };
 }
+// result.response is the upstream Response
 
-const url = new URL('/user', 'https://api.github.com');
-const headers = new Headers({ accept: 'application/json' });
-applyCredentials(redemption.credentials, url, headers);
-
-const response = await fetch(url, { headers });
+// For custom transports, spend and apply by hand:
+// const redemption = await spend({ host, path, method });
+// applyCredentials(redemption.credentials, url, headers);
 ```
 
 ## What it guarantees
@@ -88,9 +97,10 @@ const response = await fetch(url, { headers });
   `tools/list`, and anything else that invokes no tool — the gateway is never called. A client with
   no token can still connect and see what is on offer; it discovers it needs one only when it asks
   for something that reveals a credential.
-- **One token authorizes one action.** Redemption sends the tool name and the exact arguments
-  alongside the token, so the gateway evaluates policy against the call that is really about to
-  happen. A batch that reuses a token is refused before the gateway is touched.
+- **One token authorizes one action.** Redemption sends the tool name, the exact arguments, and
+  the downstream target alongside the token, so the gateway evaluates policy against the call that
+  is really about to happen. A batch that reuses a token is refused before the gateway is touched,
+  and so is a second spend of an already-spent request.
 - **Failures are answers, not crashes.** `redeem()` never rejects. A missing token, a malformed one,
   a gateway refusal naming its code, an unreachable gateway — each comes back as
   `{ ok: false, problem }` for you to return as a tool error the agent can read.
@@ -118,8 +128,14 @@ createKitReader(options: KitReaderOptions): KitReader
 type KitReader = {
   readonly tokenHeader: string;
   callsATool(body: unknown): boolean;
-  redeem(body: unknown, source?: { header?: string }): Promise<Redemption | undefined>;
+  redeem(
+    body: unknown,
+    source?: { header?: string; target?: KitTarget },
+  ): Promise<Redemption | undefined>;
 };
+
+type KitTarget = { host: string; path: string; method: TargetMethod };
+type KitSpend = (target: KitTarget) => Promise<Redemption>;
 
 type Redemption =
   | { ok: true; credentials: CredentialEnvelope[] }
@@ -128,8 +144,9 @@ type Redemption =
 type CredentialEnvelope = { type: 'header' | 'query'; name: string; prefix: string; value: string };
 ```
 
-Also exported: `applyCredentials`, `callsATool`, `kitActionTokenFrom` (the raw parser, if you need
-the token and its context without redeeming), and `KIT_ACTION_TOKEN_META_KEY`.
+Also exported: `keydrisFetch` (derive target, spend, apply, send), `applyCredentials`, `callsATool`,
+`kitActionTokenFrom` (the raw parser, if you need the token and its context without redeeming), and
+`KIT_ACTION_TOKEN_META_KEY`. The `/express` subpath exports `keydrisCredentials` and `kitSpendFrom`.
 
 Both token transports are accepted with or without a `Bearer ` scheme. If a request carries both a
 KIT action token and a header token and they disagree, redemption refuses rather than picking one.

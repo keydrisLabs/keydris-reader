@@ -1,4 +1,4 @@
-import { applyCredentials, type CredentialEnvelope } from '@keydris/kit-reader';
+import { keydrisFetch, type KitSpend } from '@keydris/kit-reader';
 import { config } from './config.js';
 
 export type GitHubUser = {
@@ -14,28 +14,35 @@ export class GitHubError extends Error {
   }
 }
 
+export class RedemptionRefused extends Error {}
+
 /**
  * `GET /user` — the endpoint that answers "whose token is this?", which makes it
  * the clearest proof that the credential the gateway released is the PAT and that
  * it arrived intact.
+ *
+ * One tool call, one outbound request: `keydrisFetch` spends this call's token
+ * for the credential this exact request needs, applies it, and sends it. The
+ * secret never appears in tool code.
  */
 export async function fetchAuthenticatedUser(
-  credentials: CredentialEnvelope[],
+  spend: KitSpend,
 ): Promise<GitHubUser> {
-  const url = new URL('/user', config.githubApiBase);
-  const headers = new Headers({
-    accept: 'application/vnd.github+json',
-    'x-github-api-version': '2022-11-28',
-    'user-agent': 'keydris-mcp-demo',
+  const result = await keydrisFetch(spend, new URL('/user', config.githubApiBase), {
+    headers: {
+      accept: 'application/vnd.github+json',
+      'x-github-api-version': '2022-11-28',
+      'user-agent': 'keydris-mcp-demo',
+    },
   });
-  applyCredentials(credentials, url, headers);
-
-  const response = await fetch(url, { headers });
-  if (!response.ok) {
-    throw new GitHubError(response.status);
+  if (!result.ok) {
+    throw new RedemptionRefused(result.problem);
+  }
+  if (!result.response.ok) {
+    throw new GitHubError(result.response.status);
   }
 
-  const user = (await response.json()) as {
+  const user = (await result.response.json()) as {
     login: string;
     name: string | null;
     html_url: string;

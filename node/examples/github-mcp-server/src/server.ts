@@ -1,7 +1,11 @@
-import type { Redemption } from '@keydris/kit-reader';
+import type { KitSpend } from '@keydris/kit-reader';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { fetchAuthenticatedUser, GitHubError } from './github.js';
+import {
+  fetchAuthenticatedUser,
+  GitHubError,
+  RedemptionRefused,
+} from './github.js';
 
 const outputSchema = {
   login: z.string(),
@@ -15,11 +19,11 @@ function failed(message: string) {
 }
 
 /**
- * A server bound to one request's redemption. Building it per request keeps the
- * released secret on the stack of the call that was authorized for it, rather than
- * in anything that outlives the request.
+ * A server bound to one request's one-shot spend. Building it per request keeps
+ * the released secret on the stack of the call that was authorized for it,
+ * rather than in anything that outlives the request.
  */
-export function createServer(redemption: Redemption | undefined): McpServer {
+export function createServer(spend: KitSpend): McpServer {
   const server = new McpServer(
     { name: 'keydris-github-demo', version: '0.0.1' },
     {
@@ -38,14 +42,8 @@ export function createServer(redemption: Redemption | undefined): McpServer {
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
     async () => {
-      if (!redemption?.ok) {
-        return failed(
-          redemption?.problem ?? 'No credential was released for this request.',
-        );
-      }
-
       try {
-        const user = await fetchAuthenticatedUser(redemption.credentials);
+        const user = await fetchAuthenticatedUser(spend);
         return {
           content: [
             {
@@ -56,6 +54,9 @@ export function createServer(redemption: Redemption | undefined): McpServer {
           structuredContent: user,
         };
       } catch (error) {
+        if (error instanceof RedemptionRefused) {
+          return failed(error.message);
+        }
         if (error instanceof GitHubError) {
           return failed(
             `GitHub rejected the released credential with ${error.status}.`,

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "keydris-kit-reader"
-version = "0.1.0"
+version = "0.2.0"
 description = "Redeem a single-use Keydris KIT action token for the credential an MCP server needs upstream"
 readme = "README.md"
 requires-python = ">=3.10"

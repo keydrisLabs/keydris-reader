@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from urllib.parse import urlsplit
 
 import httpx2
 from pydantic import BaseModel
 
-from keydris_kit_reader import CredentialEnvelope, apply_credentials
+from keydris_kit_reader import KitTarget, apply_credentials
+from keydris_kit_reader.mcp import KitSpend
 from keydris_kit_reader_github_demo.config import config
 
 
@@ -28,17 +29,34 @@ class GitHubError(Exception):
         self.status = status
 
 
-async def fetch_authenticated_user(credentials: Sequence[CredentialEnvelope]) -> GitHubUser:
+class RedemptionRefused(Exception):
+    """No credential arrived; the message is the gateway's readable problem."""
+
+
+async def fetch_authenticated_user(spend: KitSpend) -> GitHubUser:
     """`GET /user` — the endpoint that answers "whose token is this?", which makes
     it the clearest proof that the credential the gateway released is the PAT and
     that it arrived intact.
+
+    One tool call, one outbound request: the spend redeems this call's token for
+    the credential this exact request needs — named by its downstream target
+    (hostname without port, path without query) — at the moment the request is
+    made. The secret never appears in tool code.
     """
+    url = f"{config.github_api_base.rstrip('/')}/user"
+    parts = urlsplit(url)
+    target: KitTarget = {"host": parts.hostname or "", "path": parts.path or "/", "method": "GET"}
+
+    redemption = await spend(target)
+    if not redemption.ok:
+        raise RedemptionRefused(redemption.problem)
+
     headers = {
         "accept": "application/vnd.github+json",
         "x-github-api-version": "2022-11-28",
         "user-agent": "keydris-mcp-demo",
     }
-    url = apply_credentials(credentials, f"{config.github_api_base.rstrip('/')}/user", headers)
+    url = apply_credentials(redemption.credentials, url, headers)
 
     async with httpx2.AsyncClient() as client:
         response = await client.get(url, headers=headers)

@@ -7,10 +7,11 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import ToolAnnotations
 
 from keydris_kit_reader import KitReader
-from keydris_kit_reader.mcp import current_redemption, keydris_credentials
+from keydris_kit_reader.mcp import current_spend, keydris_credentials
 from keydris_kit_reader_github_demo.github import (
     GitHubError,
     GitHubUser,
+    RedemptionRefused,
     fetch_authenticated_user,
 )
 
@@ -21,9 +22,10 @@ INSTRUCTIONS = (
 
 
 def build_server(reader: KitReader) -> MCPServer:
-    """The middleware is the whole integration: it redeems each `tools/call` and
-    scopes the result to that call, so the tool below reads a credential it never
-    stored and cannot outlive."""
+    """The middleware is the whole integration: it arms each `tools/call` with a
+    one-shot spend scoped to that call, so the tool below redeems a credential it
+    never stored and cannot outlive — at fetch time, when the downstream target
+    is known."""
     mcp = MCPServer(
         name="keydris-github-demo",
         version="0.0.1",
@@ -40,14 +42,10 @@ def build_server(reader: KitReader) -> MCPServer:
     async def github_whoami() -> GitHubUser:
         # Any exception raised here reaches the agent as an `isError` result whose
         # text is the message — which is how a refusal stays readable.
-        redemption = current_redemption()
-        if redemption is None:
-            raise ToolError("No credential was released for this request.")
-        if not redemption.ok:
-            raise ToolError(redemption.problem)
-
         try:
-            return await fetch_authenticated_user(redemption.credentials)
+            return await fetch_authenticated_user(current_spend())
+        except RedemptionRefused as error:
+            raise ToolError(str(error)) from error
         except GitHubError as error:
             raise ToolError(
                 f"GitHub rejected the released credential with {error.status}."
