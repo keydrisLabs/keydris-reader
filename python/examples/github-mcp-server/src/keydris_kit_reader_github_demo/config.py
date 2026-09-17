@@ -41,7 +41,7 @@ def load() -> Config:
         host=os.environ.get("HOST", "127.0.0.1"),
         port=int(os.environ.get("PORT", "8788")),
         gateway_url=os.environ.get(
-            "KEYDRIS_GATEWAY_URL", "http://localhost:8080/gateway/credentials"
+            "KEYDRIS_GATEWAY_URL", "https://api.keydris.com/gateway/credentials"
         ),
         token_header=os.environ.get("KEYDRIS_TOKEN_HEADER", "authorization").strip().lower(),
         github_api_base=os.environ.get("GITHUB_API_BASE", "https://api.github.com"),

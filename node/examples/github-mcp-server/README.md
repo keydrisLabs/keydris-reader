@@ -58,8 +58,8 @@ unchanged.
    Only one vault entry may match that host/path, or the gateway refuses with
    `credential_not_found` rather than guessing between them.
 
-2. **Configure.** `cp .env.example .env` and adjust if your control plane is not on
-   `localhost:8080`.
+2. **Configure.** `cp .env.example .env`. It already sets
+   `KEYDRIS_GATEWAY_URL=https://api.keydris.com/gateway/credentials`.
 
 3. **Run.** From the `node/` workspace root, so the library is built first:
 

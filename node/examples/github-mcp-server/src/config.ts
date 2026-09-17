@@ -6,7 +6,7 @@ export const config = {
   /** Where this server redeems the token it was handed. */
   gatewayUrl:
     process.env.KEYDRIS_GATEWAY_URL ??
-    'http://localhost:8080/gateway/credentials',
+    'https://api.keydris.com/gateway/credentials',
 
   /**
    * Legacy `/agent/authorize` header accepted as a fallback. `mcp_kit_reader`

@@ -1,6 +1,6 @@
-# keydris-reader: Credential-Free MCP Servers (Node + Python)
+# Run MCP servers without storing upstream API credentials
 
-**keydris-reader is the KIT action token library for MCP servers, available for Node/TypeScript and Python. Your server holds no API key, no PAT, no secret of any kind: it redeems a single-use, action-scoped token for the credential each tool call needs, at call time.**
+**Node.js and Python middleware for MCP servers. Redeem single-use KIT action tokens for credentials after Keydris policy checks.**
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 [![CI](https://github.com/keydrisLabs/keydris-reader/actions/workflows/ci.yml/badge.svg)](https://github.com/keydrisLabs/keydris-reader/actions/workflows/ci.yml)
@@ -15,11 +15,11 @@
 ---
 
 <p align="center">
-  <img src="images/keydris-readers.png" alt="Keydris kit-reader: MCP servers that hold no credential of their own" width="100%" />
+  <img src="images/keydris-readers.png" alt="Keydris kit-reader: MCP servers without stored upstream credentials" width="100%" />
 </p>
 
 <p align="center">
-  An MCP server that holds no credential of its own. One single-use token, one action, one call.
+  Request an upstream credential only when an authorized MCP tool call needs it.
 </p>
 
 <p align="center">
@@ -29,15 +29,15 @@
 
 ---
 
-## Why a credential-free MCP server?
+## Why use KIT Reader?
 
-An MCP server that talks to a third-party API normally holds that API's credential. It is set as an environment variable, baked into an image, or loaded at boot, and it sits there for the lifetime of the process, usable by every request, every tool, and anyone who gets a shell on the box.
+KIT Reader lets your MCP server request the credentials needed for an authorized tool call. It redeems a single-use KIT action token at the Keydris gateway, where policy is checked before credentials are released. Available for Node.js/TypeScript and Python.
 
-The kit-reader removes that credential from the server entirely.
+The server avoids storing its upstream API credential in its environment, image, or boot-time configuration. The gateway evaluates the tool name, arguments, and downstream target before releasing a credential. That protects the credential-release boundary; it does **not** constrain how the receiving MCP server uses a released credential afterwards. Keep the credential in call-local state, do not log it, and route server egress through an enforcement point if that downstream use must also be governed.
 
-- No secret at rest. A compromised server yields nothing between requests; an attacker has to be present *during* an authorized call.
-- The credential's blast radius is one call. Not one process, not one session: one `tools/call`, with known arguments, evaluated against policy before the secret is revealed.
-- Redemption is bound to the actual call. The tool name and the exact arguments travel with the token, so the gateway decides against the call that is really about to happen.
+- **Per-action credential release.** The gateway checks policy before it returns a credential for a tokenized action.
+- **Action binding.** The tool name and exact arguments travel with the action token; the redemption also includes the outbound target.
+- **No stored upstream credential.** The sample and recommended integration obtain the upstream credential at call time rather than keeping it in server configuration.
 - Failures are answers, not crashes. A missing token, a policy denial, an unreachable gateway: each comes back as a readable tool error rather than an HTTP failure the agent has to guess at.
 - Zero runtime dependencies, in both languages. Framework adapters are optional; the core is plain standard library.
 
@@ -56,6 +56,16 @@ agent ──► proxy ──► POST /v1/runtime/mcp/kit-action-tokens ──►
                                    ◄── {credentials:[{type,name,prefix,value}]}
                     the MCP server ──► the upstream API  (credential applied)
 ```
+
+These three values have different owners and lifetimes:
+
+| Value | Held by | Purpose |
+| --- | --- | --- |
+| **Session KIT** | The Keydris-enabled agent session and local proxy | A short-lived session identity used to ask the control plane to mint action tokens. It is not an upstream API credential and is not sent to the MCP server as a credential. |
+| **KIT action token** | The proxy, then the MCP request's `_meta` | A single-use, action-bound token minted from the session KIT for one governed MCP action. Reader redeems this token at the gateway. |
+| **Upstream credential** | The receiving MCP server during its tool call | The value released by the gateway after its policy checks. Reader applies it to the upstream request; the server must keep it call-local and must not log or cache it. |
+
+The policy decision is about whether to release the upstream credential for the requested action. Once released, the receiving server handles that credential during the call. Reader does not itself enforce what the server subsequently does with it.
 
 Inside the server, the library owns exactly three moments.
 
@@ -135,7 +145,39 @@ A refusal is a non-2xx carrying a code: `policy_denied`, `credential_not_found`,
 ### Prerequisites
 
 - Node 20+ (npm), or Python 3.10+ ([uv](https://docs.astral.sh/uv/))
-- A Keydris gateway URL to redeem against, or a stub (see [Trying it without a control plane](#trying-it-without-a-control-plane))
+- The Keydris gateway endpoint, `https://api.keydris.com/gateway/credentials`; or a stub (see [Trying it without a control plane](#trying-it-without-a-control-plane))
+
+### Complete Keydris walkthrough
+
+This walkthrough uses the Node sample. The Python sample follows the same control-plane flow and listens on port `8788` instead of `8787`.
+
+1. In the Keydris console, create or select the agent that will call this MCP server. Copy that agent's UUID from **Agents**; this is the agent ID passed to the CLI. The policy will be assigned to this agent in step 5. The CLI does not choose a policy.
+2. Configure and start the sample. `KEYDRIS_GATEWAY_URL` is the credential-redemption endpoint, `https://api.keydris.com/gateway/credentials`; it is not the agent ID, the session KIT, or a GitHub token.
+
+   ```bash
+   cd node
+   npm install
+   Copy-Item examples/github-mcp-server/.env.example examples/github-mcp-server/.env
+   npm run dev
+   ```
+
+   On macOS/Linux, use `cp` instead of `Copy-Item`. Edit the sample `.env` only if your GitHub API base differs from its documented default.
+3. In **Integrations**, register the running sample's actual MCP URL (for local Node, `http://localhost:8787/mcp`; use your deployed HTTPS URL in production), select **Kit Reader** enforcement, and select the `github_whoami` tool discovered from the server. The registered URL is the connection identity used when the gateway evaluates credential release.
+4. In **Credentials/Vault**, add the GitHub PAT and configure its routing for that registered MCP host and path (local Node: host `localhost`, path `/mcp`). Set its injection to `Authorization` with `Bearer {value}`. Configure one unambiguous matching vault entry.
+5. In the policy builder, add an integration rule that allows this agent to call the selected `github_whoami` tool. Add a separate credential rule that allows release of the routed GitHub PAT to the registered MCP connection. Save the policy, then assign that policy to the agent from step 1. An allowed tool rule alone is not sufficient to release the credential.
+6. Configure the local Keydris client with the agent ID and start a governed agent session. `keydris init` signs in if necessary, discovers the agent policy's governed destinations, and configures the local proxy; no proxy scope is entered manually.
+
+   ```bash
+   keydris init codex <agent-id-from-Agents>
+   keydris status
+   keydris codex
+   ```
+
+   Use `keydris init claude-code <agent-id-from-Agents>` and `keydris run -- claude` for Claude Code. The angle-bracket text above describes exactly where the value comes from; replace it with the UUID copied in step 1.
+7. From the governed agent session, invoke `github_whoami` on the registered sample server. The proxy uses its session KIT to mint a KIT action token, injects that token into the MCP call, and Reader redeems it. With both policy rules allowing the call, the sample returns the GitHub identity.
+8. Change the integration rule or the credential rule to reject the same call, save it, and invoke `github_whoami` again. The tool should return a readable gateway refusal such as `policy_denied`; it must not receive an upstream credential. In the Keydris console, open **Decisions** (or **Audit**) and filter by the agent and MCP connection to inspect the allowed and denied decision records. A credential-rule denial demonstrates that tool authorization and credential release are separate checks.
+
+For production, register the deployed HTTPS URL before assigning policy and keep the vault routing host/path aligned with that registered URL. Keep `KEYDRIS_GATEWAY_URL` set to `https://api.keydris.com/gateway/credentials`.
 
 ### Installation
 
@@ -331,7 +373,7 @@ keydris-reader/
 | --- | --- | --- | --- |
 | `HOST` | n/a | `127.0.0.1` | Loopback by default. |
 | `PORT` | `8787` | `8788` | Must match what the proxy dials; the gateway looks the credential up by that host. |
-| `KEYDRIS_GATEWAY_URL` | `http://localhost:8080/gateway/credentials` | same | Redemption endpoint. |
+| `KEYDRIS_GATEWAY_URL` | `https://api.keydris.com/gateway/credentials` | same | Keydris credential-redemption endpoint. |
 | `KEYDRIS_TOKEN_HEADER` | `authorization` | same | Must match the control plane's `ACCESS_TOKEN_INJECT_HEADER`. |
 | `GITHUB_API_BASE` | `https://api.github.com` | same | Point at a stub to exercise the flow offline. |
 | `KEYDRIS_ALLOWED_HOSTS` | n/a | unset | Python only, comma-separated. Without it the SDK answers 421 on non-localhost hosts. |
@@ -395,7 +437,7 @@ Releases are package-scoped tags so the two libraries version independently: `ki
 - **Platform and security teams** who need per-call authorization instead of a long-lived environment secret
 - **Enterprises** that need policy evaluated against the actual tool call, with an audit trail of what was released and why
 - **Agent developers** who want refusals to arrive as readable tool errors instead of opaque 500s
-- **Anyone deploying MCP to untrusted infrastructure** where a compromised process must not yield a usable credential
+- **Anyone deploying MCP to untrusted infrastructure** who wants to avoid placing an upstream API credential in the server's stored configuration
 
 ---
 
@@ -403,7 +445,7 @@ Releases are package-scoped tags so the two libraries version independently: `ki
 
 ### Does my server still need an API key configured somewhere?
 
-No. That is the point. The server starts with nothing, and the credential arrives per call from the Keydris gateway, scoped to the action it was requested for.
+The Reader integration does not require the upstream API key to be stored in the MCP server. Configure the gateway URL and normal server settings, then let the gateway release the upstream credential after the relevant policy checks. This does not make a general claim about every other secret your server or deployment may use.
 
 ### Do I have to use Express or the MCP Python SDK?
 
@@ -423,7 +465,7 @@ A tool error whose text names the reason, for example *The Keydris gateway refus
 
 ### Does this govern what my server does after it gets the credential?
 
-No, and that is by design. The library governs *which MCP server receives the credential*, not what the server then does with it. Governing the server's own outbound call would mean routing its egress through Keydris too.
+No. Reader governs credential release to the receiving MCP server, not the server's subsequent use of that credential. The receiving server handles it during the call. Govern that downstream use separately, for example by routing the server's egress through Keydris.
 
 ### Can I use it commercially?
 
