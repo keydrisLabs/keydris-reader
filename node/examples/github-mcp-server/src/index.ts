@@ -1,4 +1,9 @@
-import { createKitReader } from '@keydris/kit-reader';
+import {
+  createKitReader,
+  createReaderTelemetry,
+  readerApiUrl,
+  kitActionTokenFrom,
+} from '@keydris/kit-reader';
 import { keydrisCredentials, kitSpendFrom } from '@keydris/kit-reader/express';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import express from 'express';
@@ -7,8 +12,23 @@ import { createServer } from './server.js';
 
 // One reader for the process: it holds no per-request state, only where to
 // redeem and which legacy header to fall back to.
+if (Boolean(config.apiUrl) !== Boolean(config.installationKey))
+  throw new Error('Set both KEYDRIS_API_URL and KEYDRIS_MCP_KEY');
+const telemetry =
+  config.apiUrl && config.installationKey
+    ? createReaderTelemetry({
+        apiUrl: config.apiUrl,
+        apiKey: config.installationKey,
+        onDropped: () => console.warn('Keydris telemetry delivery dropped'),
+      })
+    : undefined;
+telemetry?.start();
 const reader = createKitReader({
-  gatewayUrl: config.gatewayUrl,
+  gatewayUrl: config.apiUrl
+    ? new URL('gateway/credentials', readerApiUrl(config.apiUrl)).href
+    : config.gatewayUrl,
+  installationKey: config.installationKey,
+  telemetry,
   tokenHeader: config.tokenHeader,
 });
 
@@ -30,7 +50,11 @@ app.post('/mcp', keydrisCredentials(reader), async (req, res) => {
   // session would otherwise outlive the access token that authorized it. The
   // middleware armed a one-shot spend; the tool redeems it at fetch time, when
   // the downstream target is known.
-  const server = createServer(kitSpendFrom(req));
+  const server = createServer(
+    kitSpendFrom(req),
+    telemetry,
+    kitActionTokenFrom(req.body).token,
+  );
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
   });

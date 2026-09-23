@@ -202,3 +202,38 @@ unaffected.
 ## License
 
 [Apache License 2.0](https://github.com/keydrisLabs/keydris-reader/blob/main/LICENSE).
+
+## Kit Reader enrollment and activity logs
+
+1. Start the MCP so `initialize` and `tools/list` are reachable.
+2. In Keydris MCP servers, select **Kit Reader**, test the connection, and connect it.
+3. Create an installation key for that connection. Only an integration manager in the owning organization can issue it.
+4. Set `KEYDRIS_API_URL` and `KEYDRIS_MCP_KEY` in the deployment's secret settings and restart.
+5. Refresh enrollment status, then open the MCP's **Sessions** or **Logs** view.
+
+The key identifies one installation of one MCP in one organization. It is separate from upstream authentication headers and ordinary user API keys. Registration and heartbeat are outbound requests; the discovery test does not require the key. Rotation immediately replaces the old key; revoked or expired keys stop reporting and credential redemption.
+
+Reports distinguish tool completion from provider execution. A tool returning `isError` is a failure even when the MCP transport returned HTTP 200. A provider network failure is UNKNOWN and never triggers another provider request. Arguments, tool results, credentials, response bodies and exception messages are excluded. Calls without a verified action token remain unattributed to a session. Runtime client IP and the MCP peer IP are separate observations.
+
+Delivery is best effort: a 200-item memory queue, three delivery attempts, fixed configured destination, no redirects, 60-second registration heartbeat, and a bounded five-second flush on `close()`. Abrupt process termination can lose queued reports; authorization and credential-release evidence remains in Keydris. Call `close()` from the application's shutdown lifecycle. Gateway-managed MCPs do not enroll or use this key.
+
+### Python setup
+
+```python
+from urllib.parse import urljoin
+from keydris_kit_reader import KitReader, ReaderTelemetry, reader_api_url
+
+telemetry = ReaderTelemetry(api_url=api_url, api_key=installation_key)
+reader = KitReader(
+    gateway_url=urljoin(reader_api_url(api_url), "gateway/credentials"),
+    installation_key=installation_key,
+    telemetry=telemetry,
+)
+# Inside your asyncio application lifespan:
+telemetry.start()
+# Register keydris_credentials(reader) as usual; it observes actual tool results.
+# On shutdown:
+await telemetry.close()
+```
+
+The reporter uses asyncio and a bounded background queue. Call `Released.report_outcome("SUCCEEDED", provider_status=200)` after a provider response, or UNKNOWN on uncertain dispatch. The GitHub example demonstrates this and closes reporting in the application lifespan. Custom injected transports must enforce HTTPS and refuse redirects.

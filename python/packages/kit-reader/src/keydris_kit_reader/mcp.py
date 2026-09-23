@@ -7,11 +7,14 @@ the rest of the library, and nothing here imports `mcp` at runtime either.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable, Mapping
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
 
 from keydris_kit_reader.redeem import KitReader
+from keydris_kit_reader.telemetry import start_observation
+from keydris_kit_reader.token import kit_action_token_from
 from keydris_kit_reader.types import KitTarget, Redemption, Refused
 
 if TYPE_CHECKING:
@@ -28,9 +31,7 @@ _spend: ContextVar[KitSpend | None] = ContextVar("keydris_kit_spend", default=No
 
 
 async def _not_armed(_target: KitTarget) -> Redemption:
-    return Refused(
-        problem="The Keydris kit reader middleware is not armed for this request."
-    )
+    return Refused(problem="The Keydris kit reader middleware is not armed for this request.")
 
 
 def current_spend() -> KitSpend:
@@ -92,15 +93,33 @@ def keydris_credentials(reader: KitReader) -> ServerMiddleware[Any]:
             if redemption is None:
                 return Refused(
                     problem=(
-                        "This MCP request calls no tool, so there is no action "
-                        "token to redeem."
+                        "This MCP request calls no tool, so there is no action token to redeem."
                     )
                 )
             return redemption
 
         restore = _spend.set(spend)
+        finish = start_observation(
+            reader.telemetry,
+            str((ctx.params or {}).get("name", "unknown")),
+            kit_action_token_from(body).token,
+        )
         try:
-            return await call_next(ctx)
+            result = await call_next(ctx)
+            # SDK results use snake_case; wire dictionaries use isError.
+            failed = (
+                result.get("isError") is True
+                if isinstance(result, Mapping)
+                else getattr(result, "is_error", False) is True
+            )
+            finish("FAILED" if failed else "SUCCEEDED", "tool_error" if failed else None)
+            return result
+        except asyncio.CancelledError:
+            finish("CANCELLED", "cancelled")
+            raise
+        except Exception:
+            finish("FAILED", "handler_exception")
+            raise
         finally:
             _spend.reset(restore)
 

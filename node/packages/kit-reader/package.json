@@ -1,6 +1,6 @@
 {
   "name": "@keydris/kit-reader",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Redeem a single-use Keydris KIT action token for the credential an MCP server needs upstream",
   "license": "Apache-2.0",
   "author": "Keydris Labs",

@@ -1,4 +1,8 @@
-import type { KitSpend } from '@keydris/kit-reader';
+import {
+  observeTool,
+  type KitSpend,
+  type ReaderTelemetry,
+} from '@keydris/kit-reader';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import {
@@ -23,7 +27,11 @@ function failed(message: string) {
  * the released secret on the stack of the call that was authorized for it,
  * rather than in anything that outlives the request.
  */
-export function createServer(spend: KitSpend): McpServer {
+export function createServer(
+  spend: KitSpend,
+  telemetry?: ReaderTelemetry,
+  token?: string,
+): McpServer {
   const server = new McpServer(
     { name: 'keydris-github-demo', version: '0.0.1' },
     {
@@ -41,30 +49,31 @@ export function createServer(spend: KitSpend): McpServer {
       outputSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
-    async () => {
-      try {
-        const user = await fetchAuthenticatedUser(spend);
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: `Authenticated as ${user.login}${user.name ? ` (${user.name})` : ''}, ${user.publicRepos} public repos.`,
-            },
-          ],
-          structuredContent: user,
-        };
-      } catch (error) {
-        if (error instanceof RedemptionRefused) {
-          return failed(error.message);
+    async () =>
+      observeTool(telemetry, 'github_whoami', token, async () => {
+        try {
+          const user = await fetchAuthenticatedUser(spend);
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: `Authenticated as ${user.login}${user.name ? ` (${user.name})` : ''}, ${user.publicRepos} public repos.`,
+              },
+            ],
+            structuredContent: user,
+          };
+        } catch (error) {
+          if (error instanceof RedemptionRefused) {
+            return failed(error.message);
+          }
+          if (error instanceof GitHubError) {
+            return failed(
+              `GitHub rejected the released credential with ${error.status}.`,
+            );
+          }
+          return failed('The GitHub request could not be completed.');
         }
-        if (error instanceof GitHubError) {
-          return failed(
-            `GitHub rejected the released credential with ${error.status}.`,
-          );
-        }
-        return failed('The GitHub request could not be completed.');
-      }
-    },
+      }),
   );
 
   return server;

@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from typing import Any
+from urllib.parse import urljoin
+
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from keydris_kit_reader import KitReader
+from keydris_kit_reader import KitReader, ReaderTelemetry, reader_api_url
 from keydris_kit_reader_github_demo.config import config
 from keydris_kit_reader_github_demo.server import build_server
 
@@ -15,7 +20,25 @@ from keydris_kit_reader_github_demo.server import build_server
 def build_app() -> Starlette:
     # One reader for the process: it holds no per-request state, only where to
     # redeem and which legacy header to fall back to.
-    reader = KitReader(gateway_url=config.gateway_url, token_header=config.token_header)
+    if bool(config.api_url) != bool(config.installation_key):
+        raise ValueError("Set both KEYDRIS_API_URL and KEYDRIS_MCP_KEY")
+    telemetry = (
+        ReaderTelemetry(
+            api_url=config.api_url,
+            api_key=config.installation_key,
+            on_dropped=lambda: print("Keydris telemetry delivery dropped"),
+        )
+        if config.api_url and config.installation_key
+        else None
+    )
+    reader = KitReader(
+        gateway_url=urljoin(reader_api_url(config.api_url), "gateway/credentials")
+        if config.api_url
+        else config.gateway_url,
+        token_header=config.token_header,
+        installation_key=config.installation_key,
+        telemetry=telemetry,
+    )
     mcp = build_server(reader)
 
     # `custom_route` carries no return annotation in the SDK, so strict mypy reads
@@ -24,7 +47,7 @@ def build_app() -> Starlette:
     async def healthz(_request: Request) -> Response:
         return JSONResponse({"ok": True})
 
-    return mcp.streamable_http_app(
+    app = mcp.streamable_http_app(
         streamable_http_path="/mcp",
         # Stateless: a fresh transport per request and no session id. An MCP
         # session would otherwise outlive the short-lived token that authorized
@@ -42,6 +65,21 @@ def build_app() -> Starlette:
             else None
         ),
     )
+    original_lifespan = app.router.lifespan_context
+
+    @asynccontextmanager
+    async def lifespan(application: Starlette) -> AsyncIterator[Any]:
+        if telemetry:
+            telemetry.start()
+        try:
+            async with original_lifespan(application) as state:
+                yield state
+        finally:
+            if telemetry:
+                await telemetry.close()
+
+    app.router.lifespan_context = lifespan
+    return app
 
 
 app = build_app()

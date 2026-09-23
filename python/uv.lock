@@ -676,7 +676,7 @@ wheels = [
 
 [[package]]
 name = "keydris-kit-reader"
-version = "0.1.0"
+version = "0.3.0"
 source = { editable = "packages/kit-reader" }
 
 [package.optional-dependencies]
