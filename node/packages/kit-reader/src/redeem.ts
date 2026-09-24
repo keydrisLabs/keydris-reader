@@ -1,4 +1,5 @@
 import { callsATool, kitActionTokenFrom, tokenFrom } from './token.js';
+import { readerApiUrl } from './telemetry.js';
 
 /** Loopback never leaves the machine, so plaintext is acceptable there — and only there. */
 function isLoopbackHost(hostname: string): boolean {
@@ -21,13 +22,20 @@ function assertRedeemableUrl(raw: string, allowInsecure: boolean): void {
   try {
     url = new URL(raw);
   } catch {
-    throw new Error(`gatewayUrl must be an http(s) URL, got ${JSON.stringify(raw)}`);
+    throw new Error(
+      `gatewayUrl must be an http(s) URL, got ${JSON.stringify(raw)}`,
+    );
   }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    // A live token would just as happily be sent over `file:` or `ftp:`.
-    throw new Error(`gatewayUrl must be an http(s) URL, got ${JSON.stringify(raw)}`);
+    throw new Error(
+      `gatewayUrl must be an http(s) URL, got ${JSON.stringify(raw)}`,
+    );
   }
-  if (url.protocol === 'http:' && !isLoopbackHost(url.hostname) && !allowInsecure) {
+  if (
+    url.protocol === 'http:' &&
+    !isLoopbackHost(url.hostname) &&
+    !allowInsecure
+  ) {
     throw new Error(
       `gatewayUrl ${JSON.stringify(raw)} is plaintext http to a non-loopback host: ` +
         'the redemption channel carries a live token and returns a raw secret. ' +
@@ -71,6 +79,7 @@ function isCredentialEnvelope(value: unknown): value is CredentialEnvelope {
  */
 export function createKitReader(options: KitReaderOptions): KitReader {
   const { gatewayUrl } = options;
+  if (options.installationKey) readerApiUrl(gatewayUrl);
   assertRedeemableUrl(gatewayUrl, options.allowInsecureGatewayUrl ?? false);
   const tokenHeader = (options.tokenHeader ?? 'authorization')
     .trim()
@@ -99,7 +108,13 @@ export function createKitReader(options: KitReaderOptions): KitReader {
     try {
       response = await doFetch(gatewayUrl, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        redirect: 'error',
+        headers: {
+          'content-type': 'application/json',
+          ...(options.installationKey
+            ? { authorization: `Bearer ${options.installationKey}` }
+            : {}),
+        },
         body: JSON.stringify(
           context && target ? { token, ...context, target } : { token },
         ),
@@ -109,7 +124,10 @@ export function createKitReader(options: KitReaderOptions): KitReader {
         signal: AbortSignal.timeout(timeoutMs),
       });
     } catch {
-      return { ok: false, problem: 'The Keydris gateway could not be reached.' };
+      return {
+        ok: false,
+        problem: 'The Keydris gateway could not be reached.',
+      };
     }
 
     const body: unknown = await response.json().catch(() => undefined);
@@ -121,7 +139,11 @@ export function createKitReader(options: KitReaderOptions): KitReader {
       };
     }
 
-    const { credentials } = (body ?? {}) as { credentials?: unknown[] };
+    const { credentials, decision_id, outcome_receipt } = (body ?? {}) as {
+      credentials?: unknown[];
+      decision_id?: unknown;
+      outcome_receipt?: unknown;
+    };
     if (!Array.isArray(credentials) || credentials.length === 0) {
       return { ok: false, problem: 'The Keydris gateway released nothing.' };
     }
@@ -132,10 +154,35 @@ export function createKitReader(options: KitReaderOptions): KitReader {
           'The Keydris gateway returned a credential in a shape this reader does not recognize.',
       };
     }
-    return { ok: true, credentials };
+    if (
+      outcome_receipt !== undefined &&
+      (typeof outcome_receipt !== 'string' ||
+        !/^kor_[A-Za-z0-9_-]{43}$/.test(outcome_receipt))
+    ) {
+      return {
+        ok: false,
+        problem: 'The gateway returned an invalid outcome receipt.',
+      };
+    }
+    return {
+      ok: true,
+      credentials,
+      ...(typeof decision_id === 'string' ? { decisionId: decision_id } : {}),
+      ...(typeof outcome_receipt === 'string'
+        ? {
+            outcomeReceipt: outcome_receipt,
+            reportOutcome: (outcome) =>
+              options.telemetry?.outcome({
+                ...outcome,
+                receipt: outcome_receipt,
+              }),
+          }
+        : {}),
+    };
   }
 
   return {
+    telemetry: options.telemetry,
     tokenHeader,
 
     callsATool,

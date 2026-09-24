@@ -58,8 +58,16 @@ async def fetch_authenticated_user(spend: KitSpend) -> GitHubUser:
     }
     url = apply_credentials(redemption.credentials, url, headers)
 
-    async with httpx2.AsyncClient() as client:
-        response = await client.get(url, headers=headers)
+    try:
+        async with httpx2.AsyncClient(follow_redirects=False) as client:
+            response = await client.get(url, headers=headers)
+    except Exception:
+        redemption.report_outcome("UNKNOWN", error_code="provider_transport_unknown")
+        raise
+    redemption.report_outcome(
+        "SUCCEEDED" if 200 <= response.status_code < 300 else "FAILED",
+        provider_status=response.status_code,
+    )
 
     if response.status_code >= 400:
         raise GitHubError(response.status_code)

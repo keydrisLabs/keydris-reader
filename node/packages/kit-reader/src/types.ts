@@ -12,7 +12,15 @@ export type CredentialEnvelope = {
  * failure that leaves it guessing. `problem` is that explanation.
  */
 export type Redemption =
-  | { ok: true; credentials: CredentialEnvelope[] }
+  | {
+      ok: true;
+      credentials: CredentialEnvelope[];
+      decisionId?: string;
+      outcomeReceipt?: string;
+      reportOutcome?: (
+        outcome: Omit<import('./telemetry.js').ProviderOutcome, 'receipt'>,
+      ) => void;
+    }
   | { ok: false; problem: string };
 
 /**
@@ -29,13 +37,7 @@ export type KitActionContext = {
 
 /** HTTP methods the gateway's `target` schema accepts. */
 export type TargetMethod =
-  | 'GET'
-  | 'POST'
-  | 'PUT'
-  | 'PATCH'
-  | 'DELETE'
-  | 'HEAD'
-  | 'OPTIONS';
+  'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS';
 
 /**
  * The downstream request the credential is for. The gateway matches it against
@@ -64,6 +66,8 @@ export type TokenLookup = {
 };
 
 export type KitReaderOptions = {
+  installationKey?: string;
+  telemetry?: import('./telemetry.js').ReaderTelemetry;
   /**
    * The control plane's redemption endpoint, e.g. `https://api.keydris.com/gateway/credentials`.
    * Must be `https` unless the host is loopback: redemption posts a live token
@@ -97,6 +101,7 @@ export type KitReaderOptions = {
 };
 
 export type KitReader = {
+  readonly telemetry?: import('./telemetry.js').ReaderTelemetry;
   /** The header this reader falls back to, lowercased. */
   readonly tokenHeader: string;
 

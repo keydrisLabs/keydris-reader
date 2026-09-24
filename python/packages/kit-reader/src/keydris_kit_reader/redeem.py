@@ -8,6 +8,7 @@ from collections.abc import Mapping
 from typing import Any
 from urllib.parse import urlsplit
 
+from keydris_kit_reader.telemetry import ReaderTelemetry
 from keydris_kit_reader.token import calls_a_tool, kit_action_token_from, token_from
 from keydris_kit_reader.transport import GatewayReply, Transport, urllib_transport
 from keydris_kit_reader.types import (
@@ -45,6 +46,8 @@ class KitReader:
         transport: Transport | None = None,
         timeout: float = 10.0,
         allow_insecure_gateway_url: bool = False,
+        installation_key: str | None = None,
+        telemetry: ReaderTelemetry | None = None,
     ) -> None:
         """
         Args:
@@ -84,6 +87,16 @@ class KitReader:
             )
 
         self._gateway_url = gateway_url
+        if installation_key and (
+            parts.username
+            or parts.password
+            or parts.query
+            or parts.fragment
+            or (parts.scheme != "https" and not _is_loopback_host(parts.hostname or ""))
+        ):
+            raise ValueError("Installation keys require a secure gateway URL")
+        self._installation_key = installation_key
+        self.telemetry = telemetry
         self._token_header = token_header.strip().lower()
         self._transport = transport if transport is not None else urllib_transport(timeout)
 
@@ -168,7 +181,16 @@ class KitReader:
 
         try:
             reply = await self._transport(
-                self._gateway_url, headers=_JSON, body=json.dumps(payload).encode()
+                self._gateway_url,
+                headers={
+                    **_JSON,
+                    **(
+                        {"authorization": f"Bearer {self._installation_key}"}
+                        if self._installation_key
+                        else {}
+                    ),
+                },
+                body=json.dumps(payload).encode(),
             )
         except Exception:
             # Whatever the transport raised — a refused connection, a timeout, a
@@ -191,7 +213,16 @@ class KitReader:
                 )
             )
 
-        return Released(credentials=tuple(credentials))
+        receipt = document.get("outcome_receipt")
+        decision_id = document.get("decision_id")
+        return Released(
+            credentials=tuple(credentials),
+            outcome_receipt=receipt
+            if isinstance(receipt, str) and re.fullmatch(r"kor_[A-Za-z0-9_-]{43}", receipt)
+            else None,
+            decision_id=decision_id if isinstance(decision_id, str) else None,
+            telemetry=self.telemetry,
+        )
 
 
 def _is_credential_envelope(value: object) -> bool:

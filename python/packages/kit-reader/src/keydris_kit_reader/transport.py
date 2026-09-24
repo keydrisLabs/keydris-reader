@@ -13,9 +13,16 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Protocol
 from urllib.error import HTTPError
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 __all__ = ["GatewayReply", "Transport", "urllib_transport"]
+
+
+class _NoRedirect(HTTPRedirectHandler):
+    def redirect_request(
+        self, req: Request, fp: object, code: int, msg: str, headers: object, newurl: str
+    ) -> None:
+        return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,7 +72,7 @@ def urllib_transport(timeout: float) -> Transport:
             # `KitReader` has already rejected any scheme but http(s).
             request = Request(url, data=body, headers=dict(headers), method="POST")
             try:
-                with urlopen(request, timeout=timeout) as response:
+                with build_opener(_NoRedirect()).open(request, timeout=timeout) as response:
                     return GatewayReply(response.status, response.read())
             except HTTPError as refusal:
                 # urllib raises on 4xx/5xx, but a refusal is an answer: its body

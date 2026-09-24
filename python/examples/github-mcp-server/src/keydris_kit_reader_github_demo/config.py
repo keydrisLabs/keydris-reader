@@ -23,6 +23,8 @@ class Config:
 
     gateway_url: str
     """Where this server redeems the token it was handed."""
+    api_url: str | None
+    installation_key: str | None
 
     token_header: str
     """Legacy `/agent/authorize` header accepted as a fallback. `mcp_kit_reader`
@@ -40,6 +42,8 @@ def load() -> Config:
     return Config(
         host=os.environ.get("HOST", "127.0.0.1"),
         port=int(os.environ.get("PORT", "8788")),
+        api_url=os.environ.get("KEYDRIS_API_URL"),
+        installation_key=os.environ.get("KEYDRIS_MCP_KEY"),
         gateway_url=os.environ.get(
             "KEYDRIS_GATEWAY_URL", "http://localhost:8080/gateway/credentials"
         ),

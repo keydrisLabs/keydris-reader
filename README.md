@@ -1,6 +1,6 @@
 # keydris-reader: Credential-Free MCP Servers (Node + Python)
 
-**keydris-reader is the KIT action token library for MCP servers, available for Node/TypeScript and Python. Your server holds no API key, no PAT, no secret of any kind: it redeems a single-use, action-scoped token for the credential each tool call needs, at call time.**
+**keydris-reader is the KIT action token library for MCP servers, available for Node/TypeScript and Python. Your server stores a scoped Keydris installation key but no upstream provider key or PAT: it redeems a single-use, action-scoped token for the credential each tool call needs, at call time.**
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 [![CI](https://github.com/keydrisLabs/keydris-reader/actions/workflows/ci.yml/badge.svg)](https://github.com/keydrisLabs/keydris-reader/actions/workflows/ci.yml)
@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  An MCP server that holds no credential of its own. One single-use token, one action, one call.
+  An MCP server that holds no upstream provider credential. One single-use token, one action, one call.
 </p>
 
 <p align="center">
@@ -480,3 +480,19 @@ Built on:
 ---
 
 **If keydris-reader took a secret out of one of your servers, a star helps others find it.**
+
+## Kit Reader enrollment and activity logs
+
+1. Start the MCP so `initialize` and `tools/list` are reachable.
+2. In Keydris MCP servers, select **Kit Reader**, test the connection, and connect it.
+3. Create an installation key for that connection. Only an integration manager in the owning organization can issue it.
+4. Set `KEYDRIS_API_URL` and `KEYDRIS_MCP_KEY` in the deployment's secret settings and restart.
+5. Refresh enrollment status, then open the MCP's **Sessions** or **Logs** view.
+
+The key identifies one installation of one MCP in one organization. It is separate from upstream authentication headers and ordinary user API keys. Registration and heartbeat are outbound requests; the discovery test does not require the key. Rotation immediately replaces the old key; revoked or expired keys stop reporting and credential redemption.
+
+Reports distinguish tool completion from provider execution. A tool returning `isError` is a failure even when the MCP transport returned HTTP 200. A provider network failure is UNKNOWN and never triggers another provider request. Arguments, tool results, credentials, response bodies and exception messages are excluded. Calls without a verified action token remain unattributed to a session. Runtime client IP and the MCP peer IP are separate observations.
+
+Delivery is best effort: a 200-item memory queue, three delivery attempts, fixed configured destination, no redirects, 60-second registration heartbeat, and a bounded five-second flush on `close()`. Abrupt process termination can lose queued reports; authorization and credential-release evidence remains in Keydris. Call `close()` from the application's shutdown lifecycle. Gateway-managed MCPs do not enroll or use this key.
+
+Node and Python enrollment examples are in their package READMEs. Version 0.3.0 adds machine enrollment and reporting. Older readers must be upgraded and enrolled before using the new server's Kit Reader redemption endpoints.

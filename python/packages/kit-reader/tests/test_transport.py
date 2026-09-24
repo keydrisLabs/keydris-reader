@@ -12,7 +12,9 @@ from typing import ClassVar
 
 import pytest
 
-from keydris_kit_reader import KitReader, Refused, Released, urllib_transport
+from keydris_kit_reader import KitReader, KitTarget, Refused, Released, urllib_transport
+
+TARGET: KitTarget = {"host": "api.github.com", "path": "/user", "method": "GET"}
 
 RELEASED = [{"type": "header", "name": "Authorization", "prefix": "", "value": "Bearer ghp_x"}]
 
@@ -27,6 +29,13 @@ class Gateway(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         length = int(self.headers.get("content-length", 0))
         Gateway.received.append(json.loads(self.rfile.read(length)))
+
+        if self.path == "/redirect":
+            self.send_response(307)
+            self.send_header("location", "/release")
+            self.send_header("content-length", "0")
+            self.end_headers()
+            return
 
         status: int
         document: dict[str, object]
@@ -74,13 +83,14 @@ def tool_call(token: str) -> dict[str, object]:
 async def test_redeems_over_a_real_socket(gateway: str) -> None:
     reader = KitReader(gateway_url=f"{gateway}/release")
 
-    redemption = await reader.redeem(tool_call("action-token"))
+    redemption = await reader.redeem(tool_call("action-token"), target=TARGET)
 
     assert isinstance(redemption, Released)
     assert redemption.credentials[0]["value"] == "Bearer ghp_x"
     assert Gateway.received == [
         {
             "token": "action-token",
+            "target": TARGET,
             "mcp": {
                 "method": "tools/call",
                 "action_name": "github_whoami",
@@ -93,7 +103,7 @@ async def test_redeems_over_a_real_socket(gateway: str) -> None:
 async def test_a_refusal_is_an_answer_not_an_exception(gateway: str) -> None:
     reader = KitReader(gateway_url=f"{gateway}/refuse")
 
-    assert await reader.redeem(tool_call("action-token")) == Refused(
+    assert await reader.redeem(tool_call("action-token"), target=TARGET) == Refused(
         problem="The Keydris gateway refused: policy_denied."
     )
 
@@ -111,6 +121,13 @@ async def test_an_unreachable_gateway_is_reported_not_raised() -> None:
     # Port 1 on the loopback: nothing listens, and nothing can be started there.
     reader = KitReader(gateway_url="http://127.0.0.1:1/gateway/credentials", timeout=2.0)
 
-    assert await reader.redeem(tool_call("action-token")) == Refused(
+    assert await reader.redeem(tool_call("action-token"), target=TARGET) == Refused(
         problem="The Keydris gateway could not be reached."
     )
+
+
+async def test_machine_key_transport_does_not_follow_redirects(gateway: str) -> None:
+    reader = KitReader(gateway_url=f"{gateway}/redirect", installation_key="machine-key")
+    result = await reader.redeem(tool_call("action-token"), target=TARGET)
+    assert result == Refused(problem="The Keydris gateway refused: HTTP 307.")
+    assert len(Gateway.received) == 1

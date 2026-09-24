@@ -172,3 +172,39 @@ Releases are cut by pushing a `kit-reader-v*` tag; see
 ## License
 
 [Apache License 2.0](https://github.com/keydrisLabs/keydris-reader/blob/main/LICENSE).
+
+## Kit Reader enrollment and activity logs
+
+1. Start the MCP so `initialize` and `tools/list` are reachable.
+2. In Keydris MCP servers, select **Kit Reader**, test the connection, and connect it.
+3. Create an installation key for that connection. Only an integration manager in the owning organization can issue it.
+4. Set `KEYDRIS_API_URL` and `KEYDRIS_MCP_KEY` in the deployment's secret settings and restart.
+5. Refresh enrollment status, then open the MCP's **Sessions** or **Logs** view.
+
+The key identifies one installation of one MCP in one organization. It is separate from upstream authentication headers and ordinary user API keys. Registration and heartbeat are outbound requests; the discovery test does not require the key. Rotation immediately replaces the old key; revoked or expired keys stop reporting and credential redemption.
+
+Reports distinguish tool completion from provider execution. A tool returning `isError` is a failure even when the MCP transport returned HTTP 200. A provider network failure is UNKNOWN and never triggers another provider request. Arguments, tool results, credentials, response bodies and exception messages are excluded. Calls without a verified action token remain unattributed to a session. Runtime client IP and the MCP peer IP are separate observations.
+
+Delivery is best effort: a 200-item memory queue, three delivery attempts, fixed configured destination, no redirects, 60-second registration heartbeat, and a bounded five-second flush on `close()`. Abrupt process termination can lose queued reports; authorization and credential-release evidence remains in Keydris. Call `close()` from the application's shutdown lifecycle. Gateway-managed MCPs do not enroll or use this key.
+
+### Node setup
+
+```ts
+import { createKitReader, createReaderTelemetry, readerApiUrl, observeTool } from '@keydris/kit-reader';
+
+const apiUrl = process.env.KEYDRIS_API_URL!;
+const installationKey = process.env.KEYDRIS_MCP_KEY!;
+const telemetry = createReaderTelemetry({ apiUrl, apiKey: installationKey });
+const reader = createKitReader({
+  gatewayUrl: new URL('gateway/credentials', readerApiUrl(apiUrl)).href,
+  installationKey,
+  telemetry,
+});
+telemetry.start();
+// Wrap the actual handler, including credential-free tools:
+const result = await observeTool(telemetry, toolName, actionToken, () => handler());
+// During shutdown:
+await telemetry.close();
+```
+
+Express middleware still arms `req.kitSpend`. Wrap the MCP handler with `observeTool`; an Express response alone cannot determine an MCP tool result. `keydrisFetch` automatically reports provider outcomes; custom transports should call the successful redemption's `reportOutcome({ outcome, provider_status })`. Report UNKNOWN if a dispatched request has an uncertain result. The GitHub example wires both paths.

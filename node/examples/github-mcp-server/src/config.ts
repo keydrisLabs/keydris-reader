@@ -1,6 +1,8 @@
 import 'dotenv/config';
 
 export const config = {
+  apiUrl: process.env.KEYDRIS_API_URL,
+  installationKey: process.env.KEYDRIS_MCP_KEY,
   port: Number(process.env.PORT ?? 8787),
 
   /** Where this server redeems the token it was handed. */

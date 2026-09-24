@@ -7,8 +7,7 @@ import type { KitSpend, TargetMethod } from './types.js';
  * `ok: true` result carrying that response, for the tool to interpret.
  */
 export type KeydrisFetchResult =
-  | { ok: true; response: Response }
-  | { ok: false; problem: string };
+  { ok: true; response: Response } | { ok: false; problem: string };
 
 const TARGET_METHODS: ReadonlySet<string> = new Set([
   'GET',
@@ -55,5 +54,23 @@ export async function keydrisFetch(
 
   const headers = new Headers(init?.headers);
   applyCredentials(redemption.credentials, url, headers);
-  return { ok: true, response: await fetch(url, { ...init, method, headers }) };
+  try {
+    const response = await fetch(url, {
+      ...init,
+      method,
+      headers,
+      redirect: 'error',
+    });
+    redemption.reportOutcome?.({
+      outcome: response.ok ? 'SUCCEEDED' : 'FAILED',
+      provider_status: response.status,
+    });
+    return { ok: true, response };
+  } catch (error) {
+    redemption.reportOutcome?.({
+      outcome: 'UNKNOWN',
+      error_code: 'provider_transport_unknown',
+    });
+    throw error;
+  }
 }

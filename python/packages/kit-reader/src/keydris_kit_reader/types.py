@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal, TypedDict
+from typing import TYPE_CHECKING, Any, Literal, TypedDict
+
+if TYPE_CHECKING:
+    from keydris_kit_reader.telemetry import Outcome, ReaderTelemetry
 
 __all__ = [
     "CredentialEnvelope",
@@ -70,6 +73,20 @@ class Released:
 
     credentials: tuple[CredentialEnvelope, ...]
     ok: Literal[True] = True
+    decision_id: str | None = None
+    outcome_receipt: str | None = None
+    telemetry: ReaderTelemetry | None = None
+
+    def report_outcome(
+        self, outcome: Outcome, *, provider_status: int | None = None, error_code: str | None = None
+    ) -> None:
+        if self.telemetry and self.outcome_receipt:
+            self.telemetry.outcome(
+                self.outcome_receipt,
+                outcome,
+                provider_status=provider_status,
+                error_code=error_code,
+            )
 
     def __repr__(self) -> str:
         return f"Released(credentials=<{len(self.credentials)} redacted>)"
